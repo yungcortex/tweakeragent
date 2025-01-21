@@ -8,7 +8,7 @@ import logging
 from datetime import datetime, timedelta
 import random
 
-# Add these imports right here, after the other imports
+# Add these new imports
 import character_config
 from character_config import get_character_response, get_market_sentiment, process_chat_input
 
@@ -515,93 +515,25 @@ def get_coin_data_by_id_or_address(identifier):
     try:
         logger.info(f"Getting data for {identifier}")
 
-        # DexScreener as primary API
-        try:
-            # Handle common tokens with their contract addresses
-            contract_mapping = {
-                'btc': '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599',  # WBTC
-                'eth': '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',  # WETH
-                'bnb': '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c',  # WBNB
-                'sol': '0x570A5D26f7765Ecb712C0924E4De545B89fD43dF',  # SOL
-                'xrp': '0x1D2F0da169ceB9fC7B3144628dB156f3F6c60dBE',  # XRP
-                'doge': '0xbA2aE424d960c26247Dd6c32edC70B295c744C43',  # DOGE
-                'ada': '0x3EE2200Efb3400fAbB9AacF31297cBdD1d435D47',  # ADA
-                'matic': '0xCC42724C6683B7E57334c4E856f4c9965ED682bD'  # MATIC
-            }
-
-            # If it's a known token, use its contract address
-            search_term = contract_mapping.get(identifier.lower(), identifier)
-
-            # DexScreener API endpoint
-            dex_url = f"https://api.dexscreener.com/latest/dex/search?q={search_term}"
-            response = requests.get(dex_url, timeout=10)
-
-            if response.status_code == 200:
-                data = response.json()
-                if data.get('pairs') and len(data['pairs']) > 0:
-                    # Get the most liquid pair
-                    pair = max(data['pairs'], key=lambda x: float(x.get('liquidity', {}).get('usd', 0)))
-
-                    # Get price history
-                    price_history = []
-                    volume_history = []
-                    current_time = int(time.time() * 1000)
-
-                    # Create synthetic history from priceChange data
-                    for i in range(14):
-                        timestamp = current_time - (i * 24 * 60 * 60 * 1000)
-                        price_change = float(pair.get('priceChange', {}).get('h24', 0)) / 14
-                        base_price = float(pair['priceUsd'])
-                        historical_price = base_price / (1 + (price_change * (14 - i) / 100))
-
-                        price_history.insert(0, [timestamp, historical_price])
-                        volume_history.insert(0, [timestamp, float(pair.get('volume', {}).get('h24', 0)) / 14])
-
-                    return {
-                        'name': pair.get('baseToken', {}).get('symbol', identifier.upper()),
-                        'price': float(pair['priceUsd']),
-                        'change_24h': float(pair.get('priceChange', {}).get('h24', 0)),
-                        'volume_24h': float(pair.get('volume', {}).get('h24', 0)),
-                        'history': price_history,
-                        'volume_history': volume_history,
-                        'source': 'dexscreener'
-                    }
-
-        except Exception as e:
-            logger.error(f"DexScreener API error: {str(e)}")
-
-        # Fallback to Binance if DexScreener fails
+        # Try Binance first (more reliable)
         try:
             symbol = identifier.upper() + "USDT"
             binance_url = f"https://api.binance.com/api/v3/ticker/24hr?symbol={symbol}"
             response = requests.get(binance_url, timeout=5)
 
             if response.status_code == 200:
-                ticker_data = response.json()
-
-                # Get historical data
-                klines_url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval=1d&limit=14"
-                klines_response = requests.get(klines_url, timeout=5)
-
-                if klines_response.status_code == 200:
-                    klines = klines_response.json()
-                    prices = [[int(k[0]), float(k[4])] for k in klines]
-                    volumes = [[int(k[0]), float(k[5])] for k in klines]
-
-                    return {
-                        'name': identifier.upper(),
-                        'price': float(ticker_data['lastPrice']),
-                        'change_24h': float(ticker_data['priceChangePercent']),
-                        'volume_24h': float(ticker_data['volume']),
-                        'history': prices,
-                        'volume_history': volumes,
-                        'source': 'binance'
-                    }
-
+                data = response.json()
+                return {
+                    'name': identifier.upper(),
+                    'price': float(data['lastPrice']),
+                    'change_24h': float(data['priceChangePercent']),
+                    'volume_24h': float(data['volume']),
+                    'source': 'binance'
+                }
         except Exception as e:
             logger.error(f"Binance API error: {str(e)}")
 
-        # Final fallback to CoinGecko
+        # Fallback to CoinGecko
         try:
             coin_mapping = {
                 'btc': 'bitcoin',
@@ -623,8 +555,14 @@ def get_coin_data_by_id_or_address(identifier):
             if response.status_code == 200:
                 data = response.json()
                 if coin_id in data:
-                    return get_coingecko_data(coin_id, {'User-Agent': 'Mozilla/5.0'})
-
+                    coin_data = data[coin_id]
+                    return {
+                        'name': coin_id.upper(),
+                        'price': coin_data['usd'],
+                        'change_24h': coin_data.get('usd_24h_change', 0),
+                        'volume_24h': coin_data.get('usd_24h_vol', 0),
+                        'source': 'coingecko'
+                    }
         except Exception as e:
             logger.error(f"CoinGecko API error: {str(e)}")
 
@@ -782,7 +720,7 @@ def home():
     return render_template("index.html")
 
 
-@app.route("/ask", methods=["POST"])
+@app.route('/ask', methods=['POST'])
 def ask():
     try:
         data = request.json
@@ -791,14 +729,61 @@ def ask():
         if not user_input:
             return jsonify({"response": get_character_response("error")})
 
-        # Handle commands
-        if user_input.startswith('/'):
-            # ... existing command handling ...
-            pass
-        else:
-            # Process as chat
+        # Handle analysis commands
+        if user_input.startswith('/analyze '):
+            # Extract coin identifier
+            identifier = user_input.split(' ', 1)[1].strip()
+
+            # Get coin data
+            coin_data = get_coin_data_by_id_or_address(identifier)
+
+            if not coin_data:
+                return jsonify({"response": get_character_response("not_found")})
+
+            try:
+                # Calculate basic metrics
+                price = float(coin_data['price'])
+                change_24h = float(coin_data.get('change_24h', 0))
+                volume_24h = float(coin_data.get('volume_24h', 0))
+
+                # Determine sentiment
+                sentiment = 'bullish' if change_24h > 0 else 'bearish' if change_24h < 0 else 'neutral'
+
+                # Format response with character's style
+                response = (
+                    f"{get_character_response('analysis_intros')} "
+                    f"{coin_data['name']} at ${price:.8f}... "
+                    f"{get_market_sentiment(sentiment)}... "
+                    f"24h change: {change_24h:.2f}%... "
+                    f"volume: ${volume_24h:,.2f}... "
+                    f"*stares into the void*"
+                )
+
+                return jsonify({"response": response})
+
+            except Exception as e:
+                logger.error(f"Analysis error: {str(e)}")
+                return jsonify({"response": get_character_response("error")})
+
+        # Handle chat
+        elif not user_input.startswith('/'):
             response = process_chat_input(user_input)
             return jsonify({"response": response})
+
+        # Handle help command
+        elif user_input == '/help':
+            return jsonify({"response": """
+            *sighs deeply* here's what I can do in my eternal suffering:
+
+            /analyze <ticker/address> - full market analysis with my depressing insights
+            /help - you're looking at it, unfortunately
+
+            example: /analyze btc
+
+            or just chat with me if you're feeling particularly masochistic.
+            """})
+        else:
+            return jsonify({"response": get_character_response("chat_responses", "default")})
 
     except Exception as e:
         logger.error(f"Route error: {str(e)}")
