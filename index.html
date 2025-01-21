@@ -1,12 +1,175 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>TweakerAgent Analysis Terminal</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neural Core</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 10px;
+            background-color: #000;
+            color: #0f0;
+            font-family: 'Courier New', monospace;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 100%;
+            margin: 0 auto;
+            padding: 10px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .header pre {
+            display: inline-block;
+            font-size: 16px;
+            line-height: 1.2;
+            animation: pulse 2s infinite;
+            margin: 0;
+            white-space: pre;
+            overflow-x: auto;
+            max-width: 100%;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 0.8; }
+            50% { opacity: 1; }
+            100% { opacity: 0.8; }
+        }
+
+        .chat-container {
+            height: calc(100vh - 180px);
+            overflow-y: auto;
+            border: 1px solid #0f0;
+            padding: 10px;
+            margin-bottom: 10px;
+            background-color: rgba(0, 20, 0, 0.3);
+            border-radius: 5px;
+        }
+
+        .input-container {
+            display: flex;
+            gap: 10px;
+            position: fixed;
+            bottom: 10px;
+            left: 10px;
+            right: 10px;
+            background-color: #000;
+            padding: 10px;
+        }
+
+        #userInput {
+            flex: 1;
+            background-color: #000;
+            border: 1px solid #0f0;
+            color: #0f0;
+            padding: 10px;
+            font-family: 'Courier New', monospace;
+            border-radius: 5px;
+        }
+
+        button {
+            background-color: #0f0;
+            color: #000;
+            border: none;
+            padding: 10px 20px;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            border-radius: 5px;
+        }
+
+        .message {
+            margin-bottom: 10px;
+            word-wrap: break-word;
+        }
+
+        .user-message {
+            color: #fff;
+        }
+
+        .agent-message {
+            color: #0f0;
+        }
+
+        .coin-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin-bottom: 10px;
+        }
+
+        .coin-button {
+            background-color: transparent;
+            color: #0f0;
+            border: 1px solid #0f0;
+            padding: 5px 10px;
+            font-size: 14px;
+            white-space: nowrap;
+        }
+
+        .commands {
+            font-size: 14px;
+            margin-bottom: 15px;
+            padding: 10px;
+            border: 1px solid #0f0;
+            border-radius: 5px;
+        }
+
+        @media (max-width: 600px) {
+            body {
+                padding: 5px;
+            }
+
+            .header pre {
+                font-size: 12px;
+                transform-origin: center;
+                transform: scale(0.8);
+            }
+
+            .chat-container {
+                height: calc(100vh - 160px);
+            }
+
+            .input-container {
+                padding: 5px;
+            }
+
+            #userInput {
+                font-size: 16px;
+            }
+
+            button {
+                padding: 8px 15px;
+            }
+
+            .coin-button {
+                font-size: 12px;
+                padding: 4px 8px;
+            }
+
+            .commands {
+                font-size: 12px;
+                padding: 8px;
+            }
+        }
+
+        @media (max-width: 400px) {
+            .header pre {
+                font-size: 10px;
+                transform: scale(0.7);
+            }
+        }
+    </style>
 </head>
 <body>
-    <div id="container">
-        <div class="ascii-art">
+    <div class="container">
+        <div class="header">
+            <pre>
 ┌──────────────────────┐
 │  ▀▀▀ TWEAKER ▀▀▀    │
 │  ┌─────────────┐    │
@@ -16,33 +179,80 @@
 │  └─────────────┘    │
 │      V.2.1          │
 │   NEURAL CORE       │
-└──────────────────────┘
+└──────────────────────┘</pre>
         </div>
-        
         <div class="commands">
-            Available Commands:
-            • /analyze &lt;ticker/address&gt; - Full market analysis with prediction
-            • prediction for &lt;ticker/address&gt; - Detailed price prediction
-            • /help - Show all commands
+            Available Commands: • /analyze &lt;ticker/address&gt; - Full market analysis with prediction • prediction for &lt;ticker/address&gt; - Detailed price prediction • /help - Show all commands
         </div>
-        
-        <div class="popular-tokens">
-            <button class="token-button" onclick="analyzeToken('btc')">Bitcoin (BTC)</button>
-            <button class="token-button" onclick="analyzeToken('eth')">Ethereum (ETH)</button>
-            <button class="token-button" onclick="analyzeToken('sol')">Solana (SOL)</button>
-            <button class="token-button" onclick="analyzeToken('bnb')">BNB</button>
-            <button class="token-button" onclick="analyzeToken('xrp')">XRP</button>
-            <button class="token-button" onclick="analyzeToken('doge')">Dogecoin</button>
+        <div class="coin-buttons">
+            <button class="coin-button" onclick="analyzeToken('btc')">Bitcoin (BTC)</button>
+            <button class="coin-button" onclick="analyzeToken('eth')">Ethereum (ETH)</button>
+            <button class="coin-button" onclick="analyzeToken('sol')">Solana (SOL)</button>
+            <button class="coin-button" onclick="analyzeToken('bnb')">BNB</button>
+            <button class="coin-button" onclick="analyzeToken('xrp')">XRP</button>
+            <button class="coin-button" onclick="analyzeToken('doge')">Dogecoin</button>
         </div>
-        
-        <div id="chat-log"></div>
-        
-        <div id="input-container">
-            <input type="text" id="user-input" placeholder="Type /analyze btc or /help...">
+        <div class="chat-container" id="chatContainer">
+            <div class="message agent-message">Agent: initializing cynicism protocols... try /analyze &lt;coin&gt; or /help</div>
+        </div>
+        <div class="input-container">
+            <input type="text" id="userInput" placeholder="Enter your message..." autocomplete="off">
             <button onclick="sendMessage()">Send</button>
         </div>
     </div>
 
-    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <script>
+        function analyzeToken(token) {
+            document.getElementById('userInput').value = `/analyze ${token}`;
+            sendMessage();
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('userInput');
+            const message = input.value.trim();
+            
+            if (message) {
+                const chatContainer = document.getElementById('chatContainer');
+                chatContainer.innerHTML += `<div class="message user-message">You: ${message}</div>`;
+                input.value = '';
+                chatContainer.scrollTop = chatContainer.scrollHeight;
+                
+                fetch('/ask', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ message: message }),
+                })
+                .then(response => response.json())
+                .then(data => {
+                    chatContainer.innerHTML += `<div class="message agent-message">Agent: ${data.response}</div>`;
+                    chatContainer.scrollTop = chatContainer.scrollHeight;
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    chatContainer.innerHTML += `<div class="message agent-message">Agent: Error processing request... like my life</div>`;
+                    chatContainer.scrollTop = chatContainer.scrollHeight;
+                });
+            }
+        }
+
+        document.getElementById('userInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+
+        // Prevent zoom on double tap (mobile)
+        document.addEventListener('dblclick', function(e) {
+            e.preventDefault();
+        });
+
+        // Add loading animation to ASCII art
+        const asciiArt = document.querySelector('.header pre');
+        setInterval(() => {
+            asciiArt.style.opacity = (parseFloat(asciiArt.style.opacity) === 0.8) ? '1' : '0.8';
+        }, 2000);
+    </script>
 </body>
 </html>
