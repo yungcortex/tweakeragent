@@ -374,44 +374,64 @@ class TechnicalAnalysis:
 
 
 class MarketAnalysis:
-    def __init__(self, data):
-        self.data = data
-        self.prices = np.array([price[1] for price in data.get('history', [])])
-        self.volumes = np.array([vol[1] for vol in data.get('volume_history', [])])
-        self.technical = TechnicalAnalysis(self.prices)
+    def __init__(self, coin_data):
+        self.coin_data = coin_data
+        self.prices = [float(price[1]) for price in coin_data.get('history', [])]
+        self.volumes = [float(vol[1]) for vol in coin_data.get('volume_history', [])]
 
     def analyze_market(self):
         try:
-            if len(self.prices) < 2:
+            current_price = float(self.coin_data['price'])
+            price_change = float(self.coin_data['change_24h'])
+            volume_24h = float(self.coin_data['volume_24h'])
+            
+            # Basic analysis
+            trend = {
+                'price': current_price,
+                'price_change': price_change,
+                'volume_change': 0,
+                'rsi': 50,  # Default values
+                'macd': 0,
+                'support': current_price * 0.95,
+                'resistance': current_price * 1.05
+            }
+            
+            return {'trend': trend}
+            
+        except Exception as e:
+            logger.error(f"Market analysis error: {str(e)}")
+            return None
+
+    def predict_price(self):
+        try:
+            result = self.analyze_market()
+            if not result:
                 return None
 
-            current_price = float(self.data['price'])
-            price_change = float(self.data.get('change_24h', 0))
-
-            volume_change = 0
-            if len(self.volumes) >= 2:
-                volume_change = ((self.volumes[-1] - self.volumes[-2]) / self.volumes[-2] * 100
-                               if self.volumes[-2] != 0 else 0)
-
-            # Calculate technical indicators
-            rsi = self.calculate_rsi()
-            macd = self.calculate_macd()
-            support, resistance = self.calculate_support_resistance()
+            trend = result['trend']
+            current_price = trend['price']
+            
+            # Simple prediction
+            direction = 'bullish' if trend['price_change'] > 0 else 'bearish'
+            confidence = 'medium'
+            
+            target_1d = current_price * (1 + (0.01 * (1 if direction == 'bullish' else -1)))
+            target_7d = current_price * (1 + (0.03 * (1 if direction == 'bullish' else -1)))
+            
+            reasoning = [
+                f"price {'up' if direction == 'bullish' else 'down'} {abs(trend['price_change']):.1f}%"
+            ]
 
             return {
-                'trend': {
-                    'price': current_price,
-                    'price_change': price_change,
-                    'volume_change': volume_change,
-                    'rsi': rsi,
-                    'macd': macd,
-                    'support': support,
-                    'resistance': resistance
-                }
+                'direction': direction,
+                'confidence': confidence,
+                'target_1d': target_1d,
+                'target_7d': target_7d,
+                'reasoning': reasoning
             }
 
         except Exception as e:
-            logger.error(f"Market analysis error: {str(e)}")
+            logger.error(f"Price prediction error: {str(e)}")
             return None
 
     def predict_price(self):
@@ -431,11 +451,11 @@ class MarketAnalysis:
             }
 
             total_signal = sum(signals.values())
-            
+
             # Determine direction and confidence
             directions = ['bearish', 'neutral', 'bullish']
             confidences = ['low', 'medium', 'high']
-            
+
             direction_idx = 1  # neutral
             if total_signal >= 2:
                 direction_idx = 2  # bullish
@@ -451,7 +471,7 @@ class MarketAnalysis:
             # Calculate targets
             volatility = np.std(self.prices) / np.mean(self.prices) if len(self.prices) > 1 else 0.01
             move_multiplier = 0.01 * (1 + volatility)
-            
+
             target_1d = current_price * (1 + (move_multiplier * total_signal))
             target_7d = current_price * (1 + (move_multiplier * 3 * total_signal))
 
@@ -461,12 +481,12 @@ class MarketAnalysis:
                 reasoning.append("oversold conditions")
             elif trend['rsi'] > 70:
                 reasoning.append("overbought conditions")
-            
+
             if trend['macd'] > 0:
                 reasoning.append("positive MACD")
             elif trend['macd'] < 0:
                 reasoning.append("negative MACD")
-            
+
             if trend['volume_change'] > 0:
                 reasoning.append("increasing volume")
             else:
@@ -564,95 +584,38 @@ class MarketAnalysis:
 
 def get_coin_data_by_id_or_address(identifier):
     try:
-        logger.info(f"Getting data for {identifier}")
-        
-        # DexScreener as primary API
-        try:
-            # Common token addresses mapping
-            contract_mapping = {
-                'btc': '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599',  # WBTC
-                'eth': '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',  # WETH
-                'bnb': '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c',  # WBNB
-                'sol': '0x570A5D26f7765Ecb712C0924E4De545B89fD43dF',  # SOL
-                'xrp': '0x1D2F0da169ceB9fC7B3144628dB156f3F6c60dBE',  # XRP
-                'doge': '0xbA2aE424d960c26247Dd6c32edC70B295c744C43'   # DOGE
-            }
+        # Try Binance first (most reliable)
+        symbol = identifier.upper() + "USDT"
+        binance_url = "https://api.binance.com/api/v3"
 
-            search_term = contract_mapping.get(identifier.lower(), identifier)
-            dex_url = f"https://api.dexscreener.com/latest/dex/search?q={search_term}"
-            response = requests.get(dex_url, timeout=10)
-            
-            if response.status_code == 200:
-                data = response.json()
-                if data.get('pairs') and len(data['pairs']) > 0:
-                    pair = max(data['pairs'], key=lambda x: float(x.get('liquidity', {}).get('usd', 0)))
-                    
-                    # Create historical data points
-                    current_time = int(time.time() * 1000)
-                    price_now = float(pair['priceUsd'])
-                    volume_now = float(pair.get('volume', {}).get('h24', 0))
-                    price_change = float(pair.get('priceChange', {}).get('h24', 0))
-                    
-                    # Generate synthetic history for analysis
-                    prices = []
-                    volumes = []
-                    for i in range(30):
-                        timestamp = current_time - (i * 24 * 60 * 60 * 1000)
-                        historical_price = price_now / (1 + (price_change * (30 - i) / 100 / 30))
-                        historical_volume = volume_now / 30
-                        prices.insert(0, [timestamp, historical_price])
-                        volumes.insert(0, [timestamp, historical_volume])
+        # Get current price
+        ticker_response = requests.get(f"{binance_url}/ticker/24hr?symbol={symbol}", timeout=5)
 
-                    return {
-                        'name': pair.get('baseToken', {}).get('symbol', identifier.upper()),
-                        'price': price_now,
-                        'change_24h': price_change,
-                        'volume_24h': volume_now,
-                        'history': prices,
-                        'volume_history': volumes,
-                        'source': 'dexscreener',
-                        'liquidity': float(pair.get('liquidity', {}).get('usd', 0)),
-                        'fdv': float(pair.get('fdv', 0))
-                    }
+        if ticker_response.status_code == 200:
+            ticker_data = ticker_response.json()
 
-        except Exception as e:
-            logger.error(f"DexScreener API error: {str(e)}")
+            # Get historical data
+            klines_response = requests.get(f"{binance_url}/klines?symbol={symbol}&interval=1d&limit=30", timeout=5)
 
-        # Fallback to Binance
-        try:
-            symbol = identifier.upper() + "USDT"
-            binance_url = f"https://api.binance.com/api/v3/ticker/24hr?symbol={symbol}"
-            response = requests.get(binance_url, timeout=5)
-            
-            if response.status_code == 200:
-                data = response.json()
-                
-                # Get klines data for history
-                klines_url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval=1d&limit=30"
-                klines_response = requests.get(klines_url, timeout=5)
-                
-                if klines_response.status_code == 200:
-                    klines = klines_response.json()
-                    prices = [[int(k[0]), float(k[4])] for k in klines]
-                    volumes = [[int(k[0]), float(k[5])] for k in klines]
-                    
-                    return {
-                        'name': identifier.upper(),
-                        'price': float(data['lastPrice']),
-                        'change_24h': float(data['priceChangePercent']),
-                        'volume_24h': float(data['volume']),
-                        'history': prices,
-                        'volume_history': volumes,
-                        'source': 'binance'
-                    }
+            if klines_response.status_code == 200:
+                klines = klines_response.json()
+                prices = [[int(k[0]), float(k[4])] for k in klines]
+                volumes = [[int(k[0]), float(k[5])] for k in klines]
 
-        except Exception as e:
-            logger.error(f"Binance API error: {str(e)}")
+                return {
+                    'name': identifier.upper(),
+                    'price': float(ticker_data['lastPrice']),
+                    'change_24h': float(ticker_data['priceChangePercent']),
+                    'volume_24h': float(ticker_data['volume']),
+                    'history': prices,
+                    'volume_history': volumes,
+                    'source': 'binance'
+                }
 
         return None
 
     except Exception as e:
-        logger.error(f"Error in get_coin_data_by_id_or_address: {str(e)}")
+        logger.error(f"Error getting coin data: {str(e)}")
         return None
 
 def get_coingecko_data(coin_id, headers):
