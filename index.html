@@ -2,18 +2,25 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Neural Core</title>
     <style>
         :root {
             --neon-green: #00ff00;
             --dark-green: #002200;
+            --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
         }
 
         * {
             box-sizing: border-box;
             margin: 0;
             padding: 0;
+        }
+
+        html {
+            height: 100%;
+            width: 100%;
+            overflow: hidden;
         }
 
         body {
@@ -23,11 +30,11 @@
             color: var(--neon-green);
             font-family: 'Courier New', monospace;
             line-height: 1.4;
-            -webkit-text-size-adjust: 100%;
-            height: 100vh;
-            width: 100vw;
+            height: 100%;
+            width: 100%;
             overflow: hidden;
             position: fixed;
+            -webkit-text-size-adjust: 100%;
         }
 
         .container {
@@ -35,14 +42,14 @@
             flex-direction: column;
             height: 100%;
             width: 100%;
-            padding: 10px;
+            padding: 10px 10px calc(10px + var(--safe-area-inset-bottom)) 10px;
             gap: 8px;
             overflow: hidden;
         }
 
         .header {
-            text-align: center;
             flex-shrink: 0;
+            padding-top: env(safe-area-inset-top, 0px);
         }
 
         .header pre {
@@ -57,23 +64,22 @@
         }
 
         .commands {
+            flex-shrink: 0;
             font-size: 12px;
             padding: 8px;
             border: 1px solid var(--neon-green);
             border-radius: 5px;
             background-color: rgba(0, 255, 0, 0.05);
-            margin-bottom: 5px;
-            flex-shrink: 0;
             white-space: pre-wrap;
             word-break: break-word;
         }
 
         .coin-buttons {
+            flex-shrink: 0;
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
             gap: 5px;
             margin-bottom: 5px;
-            flex-shrink: 0;
         }
 
         .coin-button {
@@ -96,18 +102,24 @@
         .chat-container {
             flex: 1;
             overflow-y: auto;
-            min-height: 0;  /* Important for flex child scrolling */
+            min-height: 0;
+            border: 1px solid var(--neon-green);
+            padding: 10px;
+            background-color: rgba(0, 20, 0, 0.3);
+            border-radius: 5px;
             margin-bottom: 5px;
+            -webkit-overflow-scrolling: touch;
         }
 
         .input-container {
-            position: relative;
-            bottom: 0;
-            left: 0;
-            right: 0;
+            flex-shrink: 0;
+            display: flex;
+            gap: 10px;
             padding: 5px;
             background-color: #000;
-            flex-shrink: 0;
+            margin-bottom: env(safe-area-inset-bottom, 0px);
+            position: relative;
+            z-index: 1000;
         }
 
         #userInput {
@@ -119,17 +131,19 @@
             font-family: 'Courier New', monospace;
             border-radius: 5px;
             font-size: 16px;
+            min-height: 40px;
         }
 
         button {
             background-color: transparent;
             color: var(--neon-green);
             border: 1px solid var(--neon-green);
-            padding: 10px 20px;
+            padding: 8px 15px;
             cursor: pointer;
             font-family: 'Courier New', monospace;
             border-radius: 5px;
             text-shadow: 0 0 5px var(--neon-green);
+            min-height: 40px;
         }
 
         button:active {
@@ -157,41 +171,27 @@
             100% { opacity: 0.8; }
         }
 
-        @media (max-width: 430px) {
-            body {
-                padding: 5px;
-            }
-
+        /* iPhone specific adjustments */
+        @supports (-webkit-touch-callout: none) {
             .container {
-                padding: 5px;
+                height: -webkit-fill-available;
             }
 
-            .header pre {
-                font-size: 10px;
-                transform: scale(0.9);
+            .input-container {
+                padding-bottom: max(5px, env(safe-area-inset-bottom, 5px));
             }
 
-            .commands {
-                font-size: 11px;
-                padding: 6px;
-            }
-
-            .coin-button {
-                font-size: 11px;
-                padding: 6px 3px;
-            }
-
-            .message {
-                font-size: 13px;
-            }
-
-            #userInput {
-                font-size: 14px;
+            .chat-container {
+                margin-bottom: 0;
             }
         }
 
         /* iPhone SE and smaller devices */
         @media (max-width: 375px) {
+            .container {
+                padding: 5px 5px calc(5px + var(--safe-area-inset-bottom)) 5px;
+            }
+
             .header pre {
                 font-size: 9px;
                 transform: scale(0.8);
@@ -199,6 +199,7 @@
 
             .commands {
                 font-size: 10px;
+                padding: 6px;
             }
 
             .coin-button {
@@ -206,8 +207,17 @@
                 padding: 5px 2px;
             }
 
-            .message {
-                font-size: 12px;
+            #userInput, button {
+                min-height: 36px;
+            }
+        }
+
+        /* Prevent Safari zoom on input */
+        @media screen and (-webkit-min-device-pixel-ratio: 0) {
+            select,
+            textarea,
+            input {
+                font-size: 16px !important;
             }
         }
     </style>
