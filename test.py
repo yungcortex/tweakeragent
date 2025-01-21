@@ -265,60 +265,109 @@ class MarketAnalysis:
         }
 
     def predict_price(self):
-        # Calculate various technical indicators for prediction
-        rsi = self.technical.calculate_rsi()
-        macd = self.technical.calculate_macd()
-        bb = self.technical.calculate_bollinger_bands()
-        current_price = self.prices[-1]
+        try:
+            # Calculate various technical indicators for prediction
+            rsi = self.technical.calculate_rsi()
+            macd = self.technical.calculate_macd()
+            bb = self.technical.calculate_bollinger_bands()
+            current_price = float(self.prices[-1])  # Ensure we have a valid float
 
-        # Calculate price momentum
-        short_term_momentum = (
-            (self.prices[-1] / self.prices[-3] - 1) * 100 if len(self.prices) > 3 else 0
-        )
-        long_term_momentum = (
-            (self.prices[-1] / self.prices[-7] - 1) * 100 if len(self.prices) > 7 else 0
-        )
+            # Initialize prediction variables
+            confidence = "low"
+            direction = "sideways"
+            reasoning = []
 
-        # Predict price movement
-        prediction = {
-            "direction": "sideways",
-            "confidence": "low",
-            "target_1d": current_price,
-            "target_7d": current_price,
-            "reasoning": [],
-        }
+            # Validate RSI
+            if not np.isnan(rsi):  # Check if RSI is valid
+                if rsi > 70:
+                    direction = "downward"
+                    reasoning.append("overbought RSI")
+                    confidence = "medium"
+                elif rsi < 30:
+                    direction = "upward"
+                    reasoning.append("oversold RSI")
+                    confidence = "medium"
 
-        # RSI Analysis
-        if rsi > 70:
-            prediction["direction"] = "bearish"
-            prediction["confidence"] = "high"
-            prediction["reasoning"].append("severely overbought conditions")
-            prediction["target_1d"] = current_price * 0.95
-            prediction["target_7d"] = current_price * 0.85
-        elif rsi < 30:
-            prediction["direction"] = "bullish"
-            prediction["confidence"] = "high"
-            prediction["reasoning"].append("severely oversold conditions")
-            prediction["target_1d"] = current_price * 1.05
-            prediction["target_7d"] = current_price * 1.15
+            # Validate MACD
+            if not np.isnan(macd):  # Check if MACD is valid
+                if macd > 0:
+                    if direction == "upward":
+                        confidence = "high"
+                    direction = "upward"
+                    reasoning.append("positive MACD")
+                elif macd < 0:
+                    if direction == "downward":
+                        confidence = "high"
+                    direction = "downward"
+                    reasoning.append("negative MACD")
 
-        # MACD Analysis
-        if macd > 0:
-            prediction["reasoning"].append("positive MACD momentum")
-            if prediction["direction"] == "bullish":
-                prediction["confidence"] = "very high"
-        else:
-            prediction["reasoning"].append("negative MACD momentum")
-            if prediction["direction"] == "bearish":
-                prediction["confidence"] = "very high"
+            # Bollinger Bands Analysis
+            if current_price > bb['upper']:
+                if direction == "downward":
+                    confidence = "high"
+                direction = "downward"
+                reasoning.append("price above upper BB")
+            elif current_price < bb['lower']:
+                if direction == "upward":
+                    confidence = "high"
+                direction = "upward"
+                reasoning.append("price below lower BB")
 
-        # Volume Analysis
-        avg_volume = np.mean(self.volumes[-5:])
-        if self.volumes[-1] > avg_volume * 1.5:
-            prediction["reasoning"].append("high volume supporting movement")
-            prediction["confidence"] = "high"
+            # If no clear signals, check price momentum
+            if not reasoning:
+                # Calculate short-term momentum
+                short_term_change = (self.prices[-1] - self.prices[-2]) / self.prices[-2] * 100
+                if abs(short_term_change) > 1:  # 1% change threshold
+                    direction = "upward" if short_term_change > 0 else "downward"
+                    reasoning.append("price momentum")
 
-        return prediction
+            # Calculate realistic target prices based on volatility
+            volatility = np.std(self.prices[-14:]) / np.mean(self.prices[-14:])  # 14-day volatility
+
+            # Adjust move percentages based on confidence and volatility
+            base_move_1d = 0.01  # 1% base move for 24h
+            base_move_7d = 0.03  # 3% base move for 7d
+
+            confidence_multiplier = {
+                "low": 0.5,
+                "medium": 1.0,
+                "high": 1.5
+            }.get(confidence, 1.0)
+
+            move_percentage_1d = base_move_1d * (1 + volatility) * confidence_multiplier
+            move_percentage_7d = base_move_7d * (1 + volatility) * confidence_multiplier
+
+            if direction == "upward":
+                target_1d = current_price * (1 + move_percentage_1d)
+                target_7d = current_price * (1 + move_percentage_7d)
+            elif direction == "downward":
+                target_1d = current_price * (1 - move_percentage_1d)
+                target_7d = current_price * (1 - move_percentage_7d)
+            else:
+                target_1d = current_price
+                target_7d = current_price
+
+            # Ensure we have at least one reason
+            if not reasoning:
+                reasoning.append("market uncertainty")
+
+            return {
+                'direction': direction,
+                'confidence': confidence,
+                'reasoning': reasoning,
+                'target_1d': target_1d,
+                'target_7d': target_7d
+            }
+        except Exception as e:
+            print(f"Error in predict_price: {str(e)}")
+            # Return safe default values
+            return {
+                'direction': "sideways",
+                'confidence': "low",
+                'reasoning': ["calculation error"],
+                'target_1d': self.prices[-1],
+                'target_7d': self.prices[-1]
+            }
 
     def _calculate_trend_strength(self, percent_change, rsi, macd):
         if percent_change > 5 and rsi > 70:
