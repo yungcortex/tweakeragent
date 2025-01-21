@@ -1,23 +1,27 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, request, jsonify, render_template
+import os
 import json
 import time
-import random
-import requests
 import numpy as np
-from datetime import datetime, timedelta
-from collections import defaultdict
-from flask_cors import CORS
+import requests
 import logging
-import os
-from .character_config import get_character_response, get_market_sentiment, process_chat_input
+from datetime import datetime, timedelta
+import random
+
+# Add these imports right here, after the other imports
+import character_config
+from character_config import get_character_response, get_market_sentiment, process_chat_input
+
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-# Initialize Flask app
+# Setup logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 app = Flask(__name__)
-CORS(app)
 
 
 class TweakerResponses:
