@@ -396,41 +396,97 @@ class MarketAnalysis:
 
 def get_coin_data_by_id_or_address(identifier):
     try:
-        # Try CoinGecko search first
-        search_url = f"https://api.coingecko.com/api/v3/search?query={identifier}"
-        search_result = requests.get(search_url).json()
+        print(f"Attempting to get data for {identifier}")  # Debug log
 
-        if search_result["coins"]:
-            coin_id = search_result["coins"][0]["id"]
-            return get_coingecko_data(coin_id)
+        # Direct mapping for common coins
+        coin_mapping = {
+            'btc': 'bitcoin',
+            'eth': 'ethereum',
+            'bnb': 'binancecoin',
+            'sol': 'solana',
+            'xrp': 'ripple',
+            'doge': 'dogecoin'
+        }
+
+        # Add headers to prevent rate limiting
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Accept': 'application/json',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Accept-Language': 'en-US,en;q=0.9',
+        }
+
+        # Use direct mapping if available
+        coin_id = coin_mapping.get(identifier.lower())
+
+        if coin_id:
+            print(f"Using mapped coin ID: {coin_id}")  # Debug log
+            return get_coingecko_data(coin_id, headers)
+
+        # If no direct mapping, try search
+        search_url = f"https://api.coingecko.com/api/v3/search?query={identifier}"
+        print(f"Searching: {search_url}")  # Debug log
+        search_response = requests.get(search_url, headers=headers, timeout=10)
+
+        if search_response.status_code != 200:
+            print(f"CoinGecko API error: {search_response.status_code}")  # Debug log
+            return None
+
+        search_result = search_response.json()
+        print(f"Search result: {search_result}")  # Debug log
+
+        if search_result.get('coins'):
+            coin_id = search_result['coins'][0]['id']
+            return get_coingecko_data(coin_id, headers)
         else:
+            print(f"No coins found for {identifier}")  # Debug log
             return get_dexscreener_data(identifier)
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"Error in get_coin_data_by_id_or_address: {str(e)}")  # Debug log
         return None
 
 
-def get_coingecko_data(coin_id):
+def get_coingecko_data(coin_id, headers):
     try:
+        # Add delay to avoid rate limiting
+        time.sleep(1)
+
         # Get current price and 24h change
         price_url = f"https://api.coingecko.com/api/v3/simple/price?ids={coin_id}&vs_currencies=usd&include_24hr_change=true&include_24hr_vol=true"
-        price_data = requests.get(price_url).json()
+        print(f"Getting price data: {price_url}")  # Debug log
+        price_response = requests.get(price_url, headers=headers, timeout=10)
+
+        if price_response.status_code != 200:
+            print(f"Price API error: {price_response.status_code}")  # Debug log
+            return None
+
+        price_data = price_response.json()
+
+        # Add delay to avoid rate limiting
+        time.sleep(1)
 
         # Get historical data
         history_url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart?vs_currency=usd&days=14&interval=daily"
-        history = requests.get(history_url).json()
+        print(f"Getting history data: {history_url}")  # Debug log
+        history_response = requests.get(history_url, headers=headers, timeout=10)
+
+        if history_response.status_code != 200:
+            print(f"History API error: {history_response.status_code}")  # Debug log
+            return None
+
+        history = history_response.json()
 
         return {
-            "name": coin_id,
-            "price": price_data[coin_id]["usd"],
-            "change_24h": price_data[coin_id]["usd_24h_change"],
-            "volume_24h": price_data[coin_id].get("usd_24h_vol", 0),
-            "history": history["prices"],
-            "volume_history": history.get("total_volumes", []),
-            "source": "coingecko",
+            'name': coin_id,
+            'price': price_data[coin_id]['usd'],
+            'change_24h': price_data[coin_id]['usd_24h_change'],
+            'volume_24h': price_data[coin_id].get('usd_24h_vol', 0),
+            'history': history['prices'],
+            'volume_history': history.get('total_volumes', []),
+            'source': 'coingecko'
         }
     except Exception as e:
-        print(f"CoinGecko Error: {e}")
+        print(f"Error in get_coingecko_data: {str(e)}")  # Debug log
         return None
 
 
