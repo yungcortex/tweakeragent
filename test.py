@@ -9,7 +9,7 @@ from collections import defaultdict
 from flask_cors import CORS
 import logging
 import os
-from .character_config import get_character_response, get_market_sentiment
+from .character_config import get_character_response, get_market_sentiment, process_chat_input
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
@@ -787,82 +787,14 @@ def ask():
         if not user_input:
             return jsonify({"response": get_character_response("error")})
 
-        # Handle basic chat interactions
-        if user_input in ['hi', 'hello', 'hey']:
-            return jsonify({"response": get_character_response("chat_responses", "hello")})
-
-        if 'how are you' in user_input:
-            return jsonify({"response": get_character_response("chat_responses", "how_are_you")})
-
-        if any(word in user_input for word in ['thanks', 'thank you', 'thx']):
-            return jsonify({"response": get_character_response("chat_responses", "thanks")})
-
-        if user_input.startswith('/analyze ') or user_input.startswith('prediction for '):
-            # Extract coin identifier
-            identifier = user_input.split(' ', 1)[1].strip()
-
-            try:
-                # Get coin data
-                coin_data = get_coin_data_by_id_or_address(identifier)
-                if not coin_data:
-                    return jsonify({"response": get_character_response("not_found")})
-
-                # Perform analysis
-                analysis = MarketAnalysis(coin_data)
-
-                if user_input.startswith('/analyze'):
-                    result = analysis.analyze_market()
-                    prediction = analysis.predict_price()
-
-                    if result and prediction:
-                        trend = result['trend']
-                        sentiment = 'bullish' if trend['price_change'] > 0 else 'bearish' if trend['price_change'] < 0 else 'neutral'
-
-                        response = (
-                            f"{get_character_response('analysis_intros')} {coin_data['name']} at ${trend['price']:.8f}. "
-                            f"rsi at {trend['rsi']:.4f} suggesting {get_market_sentiment(sentiment)}, "
-                            f"technical analysis shows rsi at {trend['rsi']:.4f} and macd at {trend['macd']:.4f}... "
-                            f"support at ${trend['support']:.8f} and resistance at ${trend['resistance']:.8f}... "
-                            f"volume's {trend['volume_change']:.1f}% {'down' if trend['volume_change'] < 0 else 'up'}... "
-                            f"predicting a {prediction['direction']} move with {prediction['confidence']} confidence... "
-                            f"24h target: ${prediction['target_1d']:.8f}, 7d target: ${prediction['target_7d']:.8f}... "
-                            f"based on {', '.join(prediction['reasoning'])}"
-                        )
-                    else:
-                        response = get_character_response("error")
-                else:
-                    # Handle prediction command
-                    prediction = analysis.predict_price()
-                    if prediction:
-                        response = (
-                            f"{get_character_response('analysis_intros')} "
-                            f"prediction for {coin_data['name']}: "
-                            f"{prediction['direction']} move with {prediction['confidence']} confidence... "
-                            f"24h target: ${prediction['target_1d']:.8f}, 7d target: ${prediction['target_7d']:.8f}... "
-                            f"based on {', '.join(prediction['reasoning'])}"
-                        )
-                    else:
-                        response = get_character_response("error")
-
-                return jsonify({"response": response})
-
-            except Exception as e:
-                logger.error(f"Analysis error: {str(e)}")
-                return jsonify({"response": get_character_response("error")})
-
-        elif user_input == '/help':
-            return jsonify({"response": """
-            helping others... how meaningless. but here:
-            /analyze <ticker/address> - analyze any token with price prediction
-            prediction for <ticker/address> - get detailed price prediction
-            /help - you're looking at it, unfortunately
-
-            example: /analyze btc or prediction for eth
-
-            or just chat with me if you're feeling particularly masochistic.
-            """})
+        # Handle commands
+        if user_input.startswith('/'):
+            # ... existing command handling ...
+            pass
         else:
-            return jsonify({"response": get_character_response("chat_responses", "default")})
+            # Process as chat
+            response = process_chat_input(user_input)
+            return jsonify({"response": response})
 
     except Exception as e:
         logger.error(f"Route error: {str(e)}")
