@@ -510,55 +510,95 @@ def get_coin_data_by_id_or_address(identifier):
     try:
         logger.info(f"Getting data for {identifier}")
 
-        # Direct mapping for common coins
-        coin_mapping = {
-            'btc': 'bitcoin',
-            'eth': 'ethereum',
-            'bnb': 'binancecoin',
-            'sol': 'solana',
-            'xrp': 'ripple',
-            'doge': 'dogecoin',
-            'ada': 'cardano',
-            'dot': 'polkadot',
-            'matic': 'polygon',
-            'link': 'chainlink'
-        }
+        # Add retry mechanism
+        max_retries = 3
+        retry_delay = 1  # seconds
 
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
             'Accept': 'application/json'
         }
 
-        # Try direct mapping first
-        coin_id = coin_mapping.get(identifier.lower())
-        if coin_id:
-            logger.info(f"Using mapped coin ID: {coin_id}")
-            data = get_coingecko_data(coin_id, headers)
-            if data:
-                return data
+        # Try multiple data sources in sequence
+        for attempt in range(max_retries):
+            try:
+                # 1. Try CoinGecko direct mapping
+                coin_mapping = {
+                    'btc': 'bitcoin',
+                    'eth': 'ethereum',
+                    'bnb': 'binancecoin',
+                    'sol': 'solana',
+                    'xrp': 'ripple',
+                    'doge': 'dogecoin',
+                    'ada': 'cardano',
+                    'dot': 'polkadot',
+                    'matic': 'polygon',
+                    'link': 'chainlink'
+                }
 
-        # Try CoinGecko search
-        search_url = f"https://api.coingecko.com/api/v3/search?query={identifier}"
-        logger.info(f"Searching CoinGecko: {search_url}")
-        search_response = requests.get(search_url, headers=headers, timeout=10)
+                coin_id = coin_mapping.get(identifier.lower())
+                if coin_id:
+                    data = get_coingecko_data(coin_id, headers)
+                    if data:
+                        return data
 
-        if search_response.status_code == 200:
-            search_result = search_response.json()
-            if search_result.get('coins'):
-                coin_id = search_result['coins'][0]['id']
-                logger.info(f"Found coin via search: {coin_id}")
-                data = get_coingecko_data(coin_id, headers)
-                if data:
-                    return data
+                # 2. Try CoinGecko search with rate limit handling
+                search_url = f"https://api.coingecko.com/api/v3/search?query={identifier}"
+                search_response = requests.get(search_url, headers=headers, timeout=10)
 
-        # Try DexScreener for contract addresses
-        if len(identifier) > 30:  # Likely a contract address
-            logger.info("Trying DexScreener for contract address")
-            data = get_dexscreener_data(identifier)
-            if data:
-                return data
+                if search_response.status_code == 429:  # Rate limit hit
+                    logger.warning("Rate limit hit, waiting before retry...")
+                    time.sleep(retry_delay * (attempt + 1))
+                    continue
 
-        logger.warning("Failed to find coin data")
+                if search_response.status_code == 200:
+                    search_result = search_response.json()
+                    if search_result.get('coins'):
+                        coin_id = search_result['coins'][0]['id']
+                        data = get_coingecko_data(coin_id, headers)
+                        if data:
+                            return data
+
+                # 3. Try DexScreener for contract addresses
+                if len(identifier) > 30:
+                    data = get_dexscreener_data(identifier)
+                    if data:
+                        return data
+
+                # 4. Try alternative API (Binance)
+                try:
+                    binance_symbol = identifier.upper()
+                    if not binance_symbol.endswith('USDT'):
+                        binance_symbol += 'USDT'
+                    binance_url = f"https://api.binance.com/api/v3/klines?symbol={binance_symbol}&interval=1d&limit=14"
+                    binance_response = requests.get(binance_url, timeout=10)
+
+                    if binance_response.status_code == 200:
+                        klines = binance_response.json()
+                        if len(klines) > 0:
+                            prices = [[int(k[0]), float(k[4])] for k in klines]  # Use closing prices
+                            volumes = [[int(k[0]), float(k[5])] for k in klines]
+                            current_price = float(klines[-1][4])
+
+                            return {
+                                'name': identifier.upper(),
+                                'price': current_price,
+                                'change_24h': ((current_price - float(klines[-2][4])) / float(klines[-2][4])) * 100,
+                                'volume_24h': float(klines[-1][5]),
+                                'history': prices,
+                                'volume_history': volumes,
+                                'source': 'binance'
+                            }
+                except Exception as e:
+                    logger.error(f"Binance API error: {str(e)}")
+
+            except requests.exceptions.RequestException as e:
+                logger.error(f"Request error (attempt {attempt + 1}): {str(e)}")
+                if attempt < max_retries - 1:
+                    time.sleep(retry_delay * (attempt + 1))
+                continue
+
+        logger.error("All data source attempts failed")
         return None
 
     except Exception as e:
@@ -567,42 +607,66 @@ def get_coin_data_by_id_or_address(identifier):
 
 def get_coingecko_data(coin_id, headers):
     try:
-        # Get market data with validation
-        market_url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart?vs_currency=usd&days=14&interval=daily"
-        logger.info(f"Getting market data: {market_url}")
-        market_response = requests.get(market_url, headers=headers, timeout=10)
+        # Add exponential backoff
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                # Check CoinGecko API status first
+                status_url = "https://api.coingecko.com/api/v3/ping"
+                status_response = requests.get(status_url, headers=headers, timeout=5)
 
-        if market_response.status_code != 200:
-            logger.error(f"Market data failed: {market_response.status_code}")
-            return None
+                if status_response.status_code != 200:
+                    logger.warning(f"CoinGecko API might be down: {status_response.status_code}")
+                    time.sleep(1 * (attempt + 1))
+                    continue
 
-        market_data = market_response.json()
+                # Get market data
+                market_url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart?vs_currency=usd&days=14&interval=daily"
+                market_response = requests.get(market_url, headers=headers, timeout=10)
 
-        # Validate market data
-        if not market_data.get('prices') or len(market_data['prices']) < 14:
-            logger.error("Insufficient market data")
-            return None
+                if market_response.status_code == 429:  # Rate limit
+                    logger.warning("Rate limit hit, waiting...")
+                    time.sleep(1 * (attempt + 1))
+                    continue
 
-        # Get current price data
-        price_url = f"https://api.coingecko.com/api/v3/simple/price?ids={coin_id}&vs_currencies=usd&include_24hr_change=true&include_24hr_vol=true"
-        logger.info(f"Getting price data: {price_url}")
-        price_response = requests.get(price_url, headers=headers, timeout=10)
+                if market_response.status_code != 200:
+                    logger.error(f"Market data failed: {market_response.status_code}")
+                    continue
 
-        if price_response.status_code != 200:
-            logger.error(f"Price data failed: {price_response.status_code}")
-            return None
+                market_data = market_response.json()
 
-        price_data = price_response.json()
+                # Validate market data
+                if not market_data.get('prices') or len(market_data['prices']) < 2:
+                    logger.error("Insufficient market data")
+                    continue
 
-        return {
-            'name': coin_id,
-            'price': price_data[coin_id]['usd'],
-            'change_24h': price_data[coin_id].get('usd_24h_change', 0),
-            'volume_24h': price_data[coin_id].get('usd_24h_vol', 0),
-            'history': market_data['prices'],
-            'volume_history': market_data.get('total_volumes', []),
-            'source': 'coingecko'
-        }
+                # Get current price data with retry
+                price_url = f"https://api.coingecko.com/api/v3/simple/price?ids={coin_id}&vs_currencies=usd&include_24hr_change=true&include_24hr_vol=true"
+                price_response = requests.get(price_url, headers=headers, timeout=10)
+
+                if price_response.status_code != 200:
+                    logger.error(f"Price data failed: {price_response.status_code}")
+                    continue
+
+                price_data = price_response.json()
+
+                return {
+                    'name': coin_id,
+                    'price': price_data[coin_id]['usd'],
+                    'change_24h': price_data[coin_id].get('usd_24h_change', 0),
+                    'volume_24h': price_data[coin_id].get('usd_24h_vol', 0),
+                    'history': market_data['prices'],
+                    'volume_history': market_data.get('total_volumes', []),
+                    'source': 'coingecko'
+                }
+
+            except requests.exceptions.RequestException as e:
+                logger.error(f"Request error (attempt {attempt + 1}): {str(e)}")
+                if attempt < max_retries - 1:
+                    time.sleep(1 * (attempt + 1))
+                continue
+
+        return None
 
     except Exception as e:
         logger.error(f"Error in get_coingecko_data: {str(e)}")
