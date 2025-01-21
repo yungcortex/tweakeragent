@@ -725,69 +725,211 @@ def ask():
     try:
         data = request.json
         user_input = data.get('message', '').strip().lower()
-
+        
         if not user_input:
             return jsonify({"response": get_character_response("error")})
 
-        # Handle analysis commands
         if user_input.startswith('/analyze '):
-            # Extract coin identifier
             identifier = user_input.split(' ', 1)[1].strip()
-
-            # Get coin data
-            coin_data = get_coin_data_by_id_or_address(identifier)
-
-            if not coin_data:
-                return jsonify({"response": get_character_response("not_found")})
-
+            
             try:
-                # Calculate basic metrics
-                price = float(coin_data['price'])
-                change_24h = float(coin_data.get('change_24h', 0))
-                volume_24h = float(coin_data.get('volume_24h', 0))
-
-                # Determine sentiment
-                sentiment = 'bullish' if change_24h > 0 else 'bearish' if change_24h < 0 else 'neutral'
-
-                # Format response with character's style
-                response = (
-                    f"{get_character_response('analysis_intros')} "
-                    f"{coin_data['name']} at ${price:.8f}... "
-                    f"{get_market_sentiment(sentiment)}... "
-                    f"24h change: {change_24h:.2f}%... "
-                    f"volume: ${volume_24h:,.2f}... "
-                    f"*stares into the void*"
-                )
-
-                return jsonify({"response": response})
-
+                # Get coin data
+                coin_data = get_coin_data_by_id_or_address(identifier)
+                if not coin_data:
+                    return jsonify({"response": get_character_response("not_found")})
+                
+                # Perform analysis
+                analysis = MarketAnalysis(coin_data)
+                result = analysis.analyze_market()
+                prediction = analysis.predict_price()
+                
+                if result and prediction:
+                    trend = result['trend']
+                    sentiment = 'bullish' if trend['price_change'] > 0 else 'bearish' if trend['price_change'] < 0 else 'neutral'
+                    
+                    response = (
+                        f"{get_character_response('analysis_intros')} "
+                        f"{coin_data['name']} at ${trend['price']:.8f}. "
+                        f"rsi at {trend['rsi']:.2f} suggesting {get_market_sentiment(sentiment)}, "
+                        f"macd at {trend['macd']:.8f}... *stares at charts* "
+                        f"support at ${trend['support']:.8f} and resistance at ${trend['resistance']:.8f}... "
+                        f"volume's {trend['volume_change']:.1f}% {'down' if trend['volume_change'] < 0 else 'up'}... "
+                        f"predicting a {prediction['direction']} move with {prediction['confidence']} confidence... "
+                        f"24h target: ${prediction['target_1d']:.8f}, 7d target: ${prediction['target_7d']:.8f}... "
+                        f"based on {', '.join(prediction['reasoning'])}... "
+                        f"*goes back to contemplating existence*"
+                    )
+                    return jsonify({"response": response})
+                else:
+                    return jsonify({"response": get_character_response("error")})
+                    
             except Exception as e:
                 logger.error(f"Analysis error: {str(e)}")
                 return jsonify({"response": get_character_response("error")})
-
-        # Handle chat
+                
         elif not user_input.startswith('/'):
             response = process_chat_input(user_input)
             return jsonify({"response": response})
-
-        # Handle help command
+            
         elif user_input == '/help':
             return jsonify({"response": """
             *sighs deeply* here's what I can do in my eternal suffering:
-
+            
             /analyze <ticker/address> - full market analysis with my depressing insights
             /help - you're looking at it, unfortunately
-
+            
             example: /analyze btc
-
+            
             or just chat with me if you're feeling particularly masochistic.
             """})
         else:
             return jsonify({"response": get_character_response("chat_responses", "default")})
-
+            
     except Exception as e:
         logger.error(f"Route error: {str(e)}")
         return jsonify({"response": get_character_response("error")})
+
+class MarketAnalysis:
+    def __init__(self, coin_data):
+        self.coin_data = coin_data
+        self.prices = np.array([price[1] for price in coin_data.get('history', [])])
+        self.volumes = np.array([vol[1] for vol in coin_data.get('volume_history', [])])
+
+    def calculate_rsi(self, period=14):
+        deltas = np.diff(self.prices)
+        gain = np.where(deltas > 0, deltas, 0)
+        loss = np.where(deltas < 0, -deltas, 0)
+        
+        avg_gain = np.mean(gain)
+        avg_loss = np.mean(loss)
+        
+        if avg_loss == 0:
+            return 100
+        
+        rs = avg_gain / avg_loss
+        return 100 - (100 / (1 + rs))
+
+    def calculate_macd(self, fast=12, slow=26):
+        if len(self.prices) < slow:
+            return 0
+        
+        exp1 = self.prices.ewm(span=fast, adjust=False).mean()
+        exp2 = self.prices.ewm(span=slow, adjust=False).mean()
+        macd = exp1 - exp2
+        return macd.iloc[-1] if hasattr(macd, 'iloc') else macd[-1]
+
+    def calculate_support_resistance(self):
+        price_series = pd.Series(self.prices)
+        
+        # Simple support and resistance based on recent price action
+        resistance = max(self.prices[-7:]) if len(self.prices) >= 7 else self.prices[-1]
+        support = min(self.prices[-7:]) if len(self.prices) >= 7 else self.prices[-1]
+        
+        return support, resistance
+
+    def analyze_market(self):
+        try:
+            if len(self.prices) < 2:
+                return None
+                
+            current_price = self.prices[-1]
+            price_change = ((current_price - self.prices[-2]) / self.prices[-2]) * 100
+            
+            volume_change = 0
+            if len(self.volumes) >= 2:
+                volume_change = ((self.volumes[-1] - self.volumes[-2]) / self.volumes[-2]) * 100
+            
+            rsi = self.calculate_rsi()
+            macd = self.calculate_macd()
+            support, resistance = self.calculate_support_resistance()
+            
+            return {
+                'trend': {
+                    'price': current_price,
+                    'price_change': price_change,
+                    'volume_change': volume_change,
+                    'rsi': rsi,
+                    'macd': macd,
+                    'support': support,
+                    'resistance': resistance
+                }
+            }
+        except Exception as e:
+            logger.error(f"Market analysis error: {str(e)}")
+            return None
+
+    def predict_price(self):
+        try:
+            analysis = self.analyze_market()
+            if not analysis:
+                return None
+                
+            trend = analysis['trend']
+            current_price = trend['price']
+            
+            # Generate prediction
+            confidence_levels = ['low', 'medium', 'high']
+            directions = ['bearish', 'neutral', 'bullish']
+            
+            # Determine direction and confidence based on indicators
+            rsi_signal = 1 if trend['rsi'] < 30 else -1 if trend['rsi'] > 70 else 0
+            macd_signal = 1 if trend['macd'] > 0 else -1 if trend['macd'] < 0 else 0
+            price_signal = 1 if trend['price_change'] > 0 else -1 if trend['price_change'] < 0 else 0
+            
+            # Combine signals
+            total_signal = rsi_signal + macd_signal + price_signal
+            
+            # Determine direction
+            direction_idx = 1  # neutral
+            if total_signal >= 2:
+                direction_idx = 2  # bullish
+            elif total_signal <= -2:
+                direction_idx = 0  # bearish
+            
+            # Determine confidence
+            confidence_idx = 1  # medium
+            if abs(total_signal) >= 2:
+                confidence_idx = 2  # high
+            elif abs(total_signal) == 0:
+                confidence_idx = 0  # low
+            
+            direction = directions[direction_idx]
+            confidence = confidence_levels[confidence_idx]
+            
+            # Calculate targets
+            volatility = np.std(self.prices) / np.mean(self.prices)
+            base_move = current_price * volatility
+            
+            target_1d = current_price * (1 + (0.01 * total_signal))
+            target_7d = current_price * (1 + (0.03 * total_signal))
+            
+            reasoning = []
+            if trend['rsi'] < 30:
+                reasoning.append("oversold conditions")
+            elif trend['rsi'] > 70:
+                reasoning.append("overbought conditions")
+            
+            if trend['macd'] > 0:
+                reasoning.append("positive MACD")
+            elif trend['macd'] < 0:
+                reasoning.append("negative MACD")
+            
+            if trend['volume_change'] > 0:
+                reasoning.append("increasing volume")
+            else:
+                reasoning.append("decreasing volume")
+            
+            return {
+                'direction': direction,
+                'confidence': confidence,
+                'target_1d': target_1d,
+                'target_7d': target_7d,
+                'reasoning': reasoning
+            }
+            
+        except Exception as e:
+            logger.error(f"Price prediction error: {str(e)}")
+            return None
 
 
 if __name__ == '__main__':
