@@ -810,17 +810,19 @@ def ask():
 
             # Fallback to Binance for major coins
             symbol = identifier.upper() + "USDT"
-            binance_url = "https://api.binance.com/api/v3"
 
-            # Get real-time price first
-            ticker_url = f"{binance_url}/ticker/price?symbol={symbol}"
-            price_response = requests.get(ticker_url, timeout=5)
+            # Get REAL-TIME price using spot ticker
+            spot_url = "https://api.binance.com/api/v3/ticker/price"
+            price_response = requests.get(f"{spot_url}?symbol={symbol}", headers={'Cache-Control': 'no-cache'})
 
             if price_response.status_code == 200:
-                current_price = float(price_response.json()['price'])
+                real_time_data = price_response.json()
+                current_price = float(real_time_data['price'])
 
-                # Get 24h data for other metrics
-                ticker_response = requests.get(f"{binance_url}/ticker/24hr?symbol={symbol}", timeout=5)
+                # Get additional 24h data
+                ticker_url = "https://api.binance.com/api/v3/ticker/24hr"
+                ticker_response = requests.get(f"{ticker_url}?symbol={symbol}", headers={'Cache-Control': 'no-cache'})
+
                 if ticker_response.status_code == 200:
                     ticker_data = ticker_response.json()
                     change = float(ticker_data['priceChangePercent'])
