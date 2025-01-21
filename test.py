@@ -6,9 +6,17 @@ import requests
 import numpy as np
 from datetime import datetime, timedelta
 from collections import defaultdict
+from flask_cors import CORS
+import logging
+import os
+
+# Set up logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 # Initialize Flask app
 app = Flask(__name__)
+CORS(app)
 
 
 class TweakerResponses:
@@ -122,9 +130,30 @@ class TweakerResponses:
 
 
 class TechnicalAnalysis:
-    def __init__(self, prices, volumes):
-        self.prices = np.array(prices)
-        self.volumes = np.array(volumes)
+    def __init__(self, prices, volumes=None):
+        # Validate input data
+        if not isinstance(prices, (list, np.ndarray)) or len(prices) == 0:
+            raise ValueError("Prices must be a non-empty list or numpy array")
+
+        # Convert to numpy arrays and validate values
+        self.prices = np.array([float(p) for p in prices if p is not None and float(p) > 0])
+
+        if volumes is not None:
+            self.volumes = np.array([float(v) if v is not None else 0 for v in volumes])
+        else:
+            self.volumes = np.zeros_like(self.prices)
+
+        # Validate data length
+        if len(self.prices) < 2:
+            raise ValueError("Insufficient price data for analysis")
+
+        # Remove any remaining invalid values
+        self.prices = self.prices[~np.isnan(self.prices)]
+        self.volumes = self.volumes[~np.isnan(self.volumes)]
+
+        # Ensure minimum data length
+        if len(self.prices) < 14:  # Minimum required for most indicators
+            raise ValueError("Minimum 14 periods of data required")
 
     def calculate_sma(self, period):
         return np.mean(self.prices[-period:])
@@ -134,29 +163,130 @@ class TechnicalAnalysis:
         weights /= weights.sum()
         return np.convolve(self.prices, weights, mode="valid")[0]
 
-    def calculate_rsi(self, period=14):
-        deltas = np.diff(self.prices)
-        gains = np.where(deltas > 0, deltas, 0)
-        losses = np.where(deltas < 0, -deltas, 0)
+    def calculate_rsi(self, periods=14):
+        try:
+            # Validate periods
+            periods = int(periods)
+            if periods < 2:
+                raise ValueError("RSI periods must be >= 2")
+            if periods > len(self.prices) - 1:
+                raise ValueError("Not enough data for specified RSI periods")
 
-        avg_gain = np.mean(gains[-period:])
-        avg_loss = np.mean(losses[-period:])
+            # Calculate price changes
+            deltas = np.diff(self.prices)
 
-        if avg_loss == 0:
-            return 100
+            # Separate gains and losses
+            gains = np.where(deltas > 0, deltas, 0)
+            losses = np.where(deltas < 0, -deltas, 0)
 
-        rs = avg_gain / avg_loss
-        return 100 - (100 / (1 + rs))
+            # Validate data
+            if np.isnan(gains).any() or np.isnan(losses).any():
+                logger.warning("Invalid values in RSI calculation")
+                return 50
 
-    def calculate_macd(self):
-        ema12 = self.calculate_ema(12)
-        ema26 = self.calculate_ema(26)
-        return ema12 - ema26
+            # Calculate initial averages
+            avg_gain = np.mean(gains[:periods])
+            avg_loss = np.mean(losses[:periods])
 
-    def calculate_bollinger_bands(self, period=20):
-        sma = self.calculate_sma(period)
-        std = np.std(self.prices[-period:])
-        return {"upper": sma + (std * 2), "middle": sma, "lower": sma - (std * 2)}
+            if np.isnan(avg_gain) or np.isnan(avg_loss):
+                logger.warning("NaN in initial RSI averages")
+                return 50
+
+            # Initialize arrays for results
+            rsi_values = np.zeros(len(self.prices))
+
+            # Calculate first RSI value
+            if avg_loss == 0:
+                rsi_values[periods] = 100
+            else:
+                rs = avg_gain / avg_loss
+                rsi_values[periods] = 100 - (100 / (1 + rs))
+
+            # Calculate subsequent values using smoothing
+            for i in range(periods + 1, len(self.prices)):
+                avg_gain = ((avg_gain * (periods - 1)) + gains[i-1]) / periods
+                avg_loss = ((avg_loss * (periods - 1)) + losses[i-1]) / periods
+
+                if avg_loss == 0:
+                    rsi_values[i] = 100
+                else:
+                    rs = avg_gain / avg_loss
+                    rsi_values[i] = 100 - (100 / (1 + rs))
+
+            # Validate final RSI value
+            final_rsi = float(rsi_values[-1])
+            if np.isnan(final_rsi) or final_rsi < 0 or final_rsi > 100:
+                logger.warning(f"Invalid final RSI value: {final_rsi}")
+                return 50
+
+            return final_rsi
+
+        except Exception as e:
+            logger.error(f"Error in RSI calculation: {str(e)}")
+            return 50
+
+    def calculate_macd(self, fast=12, slow=26, signal=9):
+        try:
+            # Validate parameters
+            if not all(isinstance(x, int) and x > 0 for x in [fast, slow, signal]):
+                raise ValueError("MACD parameters must be positive integers")
+            if slow <= fast:
+                raise ValueError("MACD slow period must be greater than fast period")
+            if len(self.prices) < slow + signal:
+                raise ValueError("Insufficient data for MACD calculation")
+
+            # Calculate EMAs
+            exp1 = np.exp(self.prices).ewm(span=fast, adjust=False).mean()
+            exp2 = np.exp(self.prices).ewm(span=slow, adjust=False).mean()
+            macd = exp1 - exp2
+            signal_line = macd.ewm(span=signal, adjust=False).mean()
+
+            # Validate results
+            final_macd = float(macd.iloc[-1] if hasattr(macd, 'iloc') else macd[-1])
+            if np.isnan(final_macd):
+                logger.warning("Invalid MACD value")
+                return 0
+
+            return final_macd
+
+        except Exception as e:
+            logger.error(f"Error in MACD calculation: {str(e)}")
+            return 0
+
+    def calculate_bollinger_bands(self, window=20, num_std=2):
+        try:
+            # Validate parameters
+            if not isinstance(window, int) or window < 2:
+                raise ValueError("Bollinger window must be integer >= 2")
+            if len(self.prices) < window:
+                raise ValueError("Insufficient data for Bollinger Bands")
+
+            # Calculate bands
+            rolling_mean = np.mean(self.prices[-window:])
+            rolling_std = np.std(self.prices[-window:])
+
+            # Validate results
+            if np.isnan(rolling_mean) or np.isnan(rolling_std):
+                logger.warning("Invalid Bollinger Bands values")
+                return {
+                    'upper': self.prices[-1] * 1.02,
+                    'middle': self.prices[-1],
+                    'lower': self.prices[-1] * 0.98
+                }
+
+            return {
+                'upper': rolling_mean + (rolling_std * num_std),
+                'middle': rolling_mean,
+                'lower': rolling_mean - (rolling_std * num_std)
+            }
+
+        except Exception as e:
+            logger.error(f"Error in Bollinger Bands calculation: {str(e)}")
+            return {
+                'upper': self.prices[-1] * 1.02,
+                'middle': self.prices[-1],
+                'lower': self.prices[-1] * 0.98
+            }
 
     def check_head_and_shoulders(self):
         if len(self.prices) < 20:
@@ -189,96 +319,133 @@ class TechnicalAnalysis:
                 peaks.append(i)
         return peaks
 
-    def get_support_resistance(self):
-        prices = self.prices[-50:] if len(self.prices) > 50 else self.prices
-        sorted_prices = np.sort(prices)
+    def get_support_resistance(self, window=20):
+        try:
+            # Validate parameters
+            if not isinstance(window, int) or window < 2:
+                raise ValueError("Window must be integer >= 2")
+            if len(self.prices) < window:
+                raise ValueError("Insufficient data for support/resistance")
 
-        clusters = []
-        current_cluster = [sorted_prices[0]]
+            prices = self.prices[-window:]  # Use last window prices
+            levels = []
 
-        for price in sorted_prices[1:]:
-            if price - current_cluster[-1] < current_cluster[-1] * 0.02:
-                current_cluster.append(price)
-            else:
-                if len(current_cluster) > 3:
-                    clusters.append(np.mean(current_cluster))
-                current_cluster = [price]
+            # Find local maxima and minima
+            for i in range(2, len(prices)-2):
+                if prices[i] > prices[i-1] and prices[i] > prices[i+1]:  # Local max
+                    levels.append(prices[i])
+                if prices[i] < prices[i-1] and prices[i] < prices[i+1]:  # Local min
+                    levels.append(prices[i])
 
-        mid_price = np.median(prices)
-        support = [p for p in clusters if p < mid_price]
-        resistance = [p for p in clusters if p > mid_price]
+            # If no levels found, use simple percentage-based levels
+            if not levels:
+                current_price = self.prices[-1]
+                levels = [
+                    current_price * 0.95,  # Support
+                    current_price * 1.05   # Resistance
+                ]
 
-        return {
-            "support": support[-2:] if len(support) > 1 else support,
-            "resistance": resistance[:2] if len(resistance) > 1 else resistance,
-        }
+            # Cluster levels
+            levels = np.array(levels)
+            levels.sort()
+
+            return {
+                'support': [float(level) for level in levels[levels < self.prices[-1]]],
+                'resistance': [float(level) for level in levels[levels > self.prices[-1]]]
+            }
+
+        except Exception as e:
+            logger.error(f"Error in support/resistance calculation: {str(e)}")
+            current_price = self.prices[-1]
+            return {
+                'support': [float(current_price * 0.95)],
+                'resistance': [float(current_price * 1.05)]
+            }
 
 
 class MarketAnalysis:
     def __init__(self, data):
-        self.data = data
-        self.prices = np.array([price[1] for price in data["history"]])
-        self.volumes = np.array(
-            [vol[1] for vol in data.get("volume_history", [])] or [0] * len(self.prices)
-        )
-        self.technical = TechnicalAnalysis(self.prices, self.volumes)
-        self.responses = TweakerResponses()
+        try:
+            # Validate input data
+            if not isinstance(data, dict):
+                raise ValueError("Data must be a dictionary")
+            required_fields = ['name', 'price', 'history', 'volume_history']
+            if not all(field in data for field in required_fields):
+                raise ValueError(f"Missing required fields: {required_fields}")
 
-    def analyze_market_structure(self):
-        current_price = self.prices[-1]
-        high = max(self.prices)
-        low = min(self.prices)
+            self.data = data
 
-        # Calculate key metrics
-        percent_change_24h = self.data["change_24h"]
-        volume_change = (
-            ((self.volumes[-1] / self.volumes[-2]) - 1) * 100
-            if len(self.volumes) > 1
-            else 0
-        )
-        rsi = self.technical.calculate_rsi()
-        macd = self.technical.calculate_macd()
-        bollinger = self.technical.calculate_bollinger_bands()
+            # Convert price history to numpy arrays with validation
+            self.prices = np.array([float(price[1]) for price in data['history'] if price[1] is not None])
+            self.volumes = np.array([float(vol[1]) for vol in data.get('volume_history', []) if vol[1] is not None])
 
-        # Determine trend strength
-        trend_strength = self._calculate_trend_strength(percent_change_24h, rsi, macd)
+            # Ensure minimum data length
+            if len(self.prices) < 14:
+                raise ValueError("Insufficient price history")
 
-        # Get support/resistance levels
-        levels = self.technical.get_support_resistance()
+            # Initialize technical analysis with validated data
+            self.technical = TechnicalAnalysis(self.prices, self.volumes)
 
-        return {
-            "trend": trend_strength,
-            "metrics": {
-                "percent_change": percent_change_24h,
-                "volume_change": volume_change,
-                "rsi": rsi,
-                "macd": macd,
-                "support": levels["support"][0]
-                if levels["support"]
-                else current_price * 0.95,
-                "resistance": levels["resistance"][0]
-                if levels["resistance"]
-                else current_price * 1.05,
-                "price": current_price,
-                "patterns": [],
-            },
-        }
+        except Exception as e:
+            logger.error(f"Error initializing MarketAnalysis: {str(e)}")
+            raise
+
+    def analyze_market(self):
+        try:
+            # Get current price and calculate changes
+            current_price = float(self.data['price'])
+            price_change = float(self.data.get('change_24h', 0))
+
+            # Calculate volume change
+            if len(self.volumes) >= 2:
+                volume_change = ((self.volumes[-1] - self.volumes[-2]) / self.volumes[-2] * 100
+                               if self.volumes[-2] != 0 else 0)
+            else:
+                volume_change = 0
+
+            # Calculate technical indicators with error handling
+            try:
+                rsi = self.technical.calculate_rsi()
+                macd = self.technical.calculate_macd()
+                levels = self.technical.get_support_resistance()
+            except Exception as e:
+                logger.error(f"Error calculating indicators: {str(e)}")
+                rsi = 50
+                macd = 0
+                levels = {'support': [], 'resistance': []}
+
+            return {
+                'trend': {
+                    'price_change': price_change,
+                    'volume_change': volume_change,
+                    'rsi': rsi,
+                    'macd': macd,
+                    'support': levels['support'][0] if levels['support'] else current_price * 0.95,
+                    'resistance': levels['resistance'][0] if levels['resistance'] else current_price * 1.05,
+                    'price': current_price,
+                    'patterns': []
+                }
+            }
+
+        except Exception as e:
+            logger.error(f"Error in market analysis: {str(e)}")
+            return None
 
     def predict_price(self):
         try:
-            # Calculate various technical indicators for prediction
+            # Get technical indicators with validation
             rsi = self.technical.calculate_rsi()
             macd = self.technical.calculate_macd()
             bb = self.technical.calculate_bollinger_bands()
-            current_price = float(self.prices[-1])  # Ensure we have a valid float
+            current_price = float(self.prices[-1])
 
             # Initialize prediction variables
             confidence = "low"
             direction = "sideways"
             reasoning = []
 
-            # Validate RSI
-            if not np.isnan(rsi):  # Check if RSI is valid
+            # RSI Analysis with validation
+            if not np.isnan(rsi):
                 if rsi > 70:
                     direction = "downward"
                     reasoning.append("overbought RSI")
@@ -288,8 +455,8 @@ class MarketAnalysis:
                     reasoning.append("oversold RSI")
                     confidence = "medium"
 
-            # Validate MACD
-            if not np.isnan(macd):  # Check if MACD is valid
+            # MACD Analysis with validation
+            if not np.isnan(macd):
                 if macd > 0:
                     if direction == "upward":
                         confidence = "high"
@@ -301,151 +468,47 @@ class MarketAnalysis:
                     direction = "downward"
                     reasoning.append("negative MACD")
 
-            # Bollinger Bands Analysis
-            if current_price > bb['upper']:
-                if direction == "downward":
-                    confidence = "high"
-                direction = "downward"
-                reasoning.append("price above upper BB")
-            elif current_price < bb['lower']:
-                if direction == "upward":
-                    confidence = "high"
-                direction = "upward"
-                reasoning.append("price below lower BB")
+            # Calculate targets based on historical volatility
+            volatility = np.std(self.prices[-14:]) / np.mean(self.prices[-14:])
+            base_move = max(0.01, volatility)  # Minimum 1% move
 
-            # If no clear signals, check price momentum
-            if not reasoning:
-                # Calculate short-term momentum
-                short_term_change = (self.prices[-1] - self.prices[-2]) / self.prices[-2] * 100
-                if abs(short_term_change) > 1:  # 1% change threshold
-                    direction = "upward" if short_term_change > 0 else "downward"
-                    reasoning.append("price momentum")
+            # Adjust move based on confidence
+            confidence_multiplier = {"low": 0.5, "medium": 1.0, "high": 1.5}[confidence]
+            move_1d = base_move * confidence_multiplier
+            move_7d = move_1d * 2  # 7-day move is larger
 
-            # Calculate realistic target prices based on volatility
-            volatility = np.std(self.prices[-14:]) / np.mean(self.prices[-14:])  # 14-day volatility
-
-            # Adjust move percentages based on confidence and volatility
-            base_move_1d = 0.01  # 1% base move for 24h
-            base_move_7d = 0.03  # 3% base move for 7d
-
-            confidence_multiplier = {
-                "low": 0.5,
-                "medium": 1.0,
-                "high": 1.5
-            }.get(confidence, 1.0)
-
-            move_percentage_1d = base_move_1d * (1 + volatility) * confidence_multiplier
-            move_percentage_7d = base_move_7d * (1 + volatility) * confidence_multiplier
-
+            # Calculate target prices
             if direction == "upward":
-                target_1d = current_price * (1 + move_percentage_1d)
-                target_7d = current_price * (1 + move_percentage_7d)
+                target_1d = current_price * (1 + move_1d)
+                target_7d = current_price * (1 + move_7d)
             elif direction == "downward":
-                target_1d = current_price * (1 - move_percentage_1d)
-                target_7d = current_price * (1 - move_percentage_7d)
+                target_1d = current_price * (1 - move_1d)
+                target_7d = current_price * (1 - move_7d)
             else:
-                target_1d = current_price
-                target_7d = current_price
-
-            # Ensure we have at least one reason
-            if not reasoning:
-                reasoning.append("market uncertainty")
+                target_1d = target_7d = current_price
 
             return {
                 'direction': direction,
                 'confidence': confidence,
                 'reasoning': reasoning,
-                'target_1d': target_1d,
-                'target_7d': target_7d
+                'target_1d': float(target_1d),
+                'target_7d': float(target_7d)
             }
+
         except Exception as e:
-            print(f"Error in predict_price: {str(e)}")
-            # Return safe default values
+            logger.error(f"Error in price prediction: {str(e)}")
             return {
                 'direction': "sideways",
                 'confidence': "low",
                 'reasoning': ["calculation error"],
-                'target_1d': self.prices[-1],
-                'target_7d': self.prices[-1]
+                'target_1d': current_price,
+                'target_7d': current_price
             }
-
-    def _calculate_trend_strength(self, percent_change, rsi, macd):
-        if percent_change > 5 and rsi > 70:
-            return "strong_bullish"
-        elif percent_change > 2 and rsi > 60:
-            return "bullish"
-        elif percent_change > 0:
-            return "weak_bullish"
-        elif percent_change < -5 and rsi < 30:
-            return "strong_bearish"
-        elif percent_change < -2 and rsi < 40:
-            return "bearish"
-        elif percent_change < 0:
-            return "weak_bearish"
-        return "neutral"
-
-    def generate_analysis_response(self):
-        analysis = self.analyze_market_structure()
-        metrics = analysis["metrics"]
-        prediction = self.predict_price()
-
-        # Format response data
-        response_data = {
-            "percent_change": f"{metrics['percent_change']:.1f}",
-            "volume_change": f"{metrics['volume_change']:.1f}",
-            "rsi": f"{metrics['rsi']:.0f}",
-            "macd_value": f"{metrics['macd']:.4f}",
-            "support": f"${metrics['support']:.8f}",
-            "resistance": f"${metrics['resistance']:.8f}",
-            "price_level": f"${metrics['price']:.8f}",
-        }
-
-        # Build comprehensive analysis
-        responses = []
-
-        # 1. Current state
-        trend_response = self.responses.trend_responses[analysis["trend"]]
-        responses.append(random.choice(trend_response).format(**response_data))
-
-        # 2. Technical Analysis
-        responses.append(
-            f"technical analysis shows RSI at {response_data['rsi']} and MACD at {response_data['macd_value']}, "
-            f"like my deteriorating mental state. support at {response_data['support']} and resistance at {response_data['resistance']}"
-        )
-
-        # 3. Volume Analysis
-        volume_state = (
-            "high_volume" if abs(metrics["volume_change"]) > 20 else "low_volume"
-        )
-        volume_trend = "bullish" if "bull" in analysis["trend"] else "bearish"
-        volume_key = f"{volume_state}_{volume_trend}"
-        if volume_key in self.responses.volume_analysis:
-            responses.append(
-                random.choice(self.responses.volume_analysis[volume_key]).format(
-                    **response_data
-                )
-            )
-
-        # 4. Price Prediction
-        prediction_text = (
-            f"my existential dread suggests a {prediction['direction']} move with {prediction['confidence']} confidence... "
-            f"24h target: ${prediction['target_1d']:.8f}, 7d target: ${prediction['target_7d']:.8f}... "
-            f"based on {', '.join(prediction['reasoning'])}, but what do i know, i'm just a depressed algorithm"
-        )
-        responses.append(prediction_text)
-
-        # Combine responses
-        final_response = (
-            f"{self.data['name'].upper()} at {response_data['price_level']}. "
-        )
-        final_response += " ".join(responses)
-
-        return final_response.lower()
 
 
 def get_coin_data_by_id_or_address(identifier):
     try:
-        print(f"Attempting to get data for {identifier}")  # Debug log
+        logger.info(f"Getting data for {identifier}")
 
         # Direct mapping for common coins
         coin_mapping = {
@@ -454,90 +517,95 @@ def get_coin_data_by_id_or_address(identifier):
             'bnb': 'binancecoin',
             'sol': 'solana',
             'xrp': 'ripple',
-            'doge': 'dogecoin'
+            'doge': 'dogecoin',
+            'ada': 'cardano',
+            'dot': 'polkadot',
+            'matic': 'polygon',
+            'link': 'chainlink'
         }
 
-        # Add headers to prevent rate limiting
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept': 'application/json'
         }
 
-        # Try getting coin data directly first
+        # Try direct mapping first
         coin_id = coin_mapping.get(identifier.lower())
         if coin_id:
-            print(f"Using direct coin ID: {coin_id}")
-            # Try getting coin data directly
-            try:
-                # Get coin data from /coins/{id} endpoint
-                coin_url = f"https://api.coingecko.com/api/v3/coins/{coin_id}"
-                print(f"Getting coin data from: {coin_url}")
-                coin_response = requests.get(coin_url, headers=headers, timeout=10)
+            logger.info(f"Using mapped coin ID: {coin_id}")
+            data = get_coingecko_data(coin_id, headers)
+            if data:
+                return data
 
-                if coin_response.status_code == 200:
-                    coin_data = coin_response.json()
-                    print("Successfully got coin data")
-
-                    return {
-                        'name': coin_id,
-                        'price': coin_data['market_data']['current_price']['usd'],
-                        'change_24h': coin_data['market_data']['price_change_percentage_24h'],
-                        'volume_24h': coin_data['market_data']['total_volume']['usd'],
-                        'history': [[int(time.time() * 1000), coin_data['market_data']['current_price']['usd']]],
-                        'volume_history': [[int(time.time() * 1000), coin_data['market_data']['total_volume']['usd']]],
-                        'source': 'coingecko'
-                    }
-                else:
-                    print(f"Failed to get coin data: {coin_response.status_code}")
-                    print(f"Response: {coin_response.text}")
-            except Exception as e:
-                print(f"Error getting coin data: {str(e)}")
-
-        # If direct lookup fails, try search
+        # Try CoinGecko search
         search_url = f"https://api.coingecko.com/api/v3/search?query={identifier}"
-        print(f"Trying search: {search_url}")
+        logger.info(f"Searching CoinGecko: {search_url}")
         search_response = requests.get(search_url, headers=headers, timeout=10)
 
         if search_response.status_code == 200:
             search_result = search_response.json()
             if search_result.get('coins'):
                 coin_id = search_result['coins'][0]['id']
-                print(f"Found coin ID from search: {coin_id}")
-                return get_coingecko_data(coin_id, headers)
+                logger.info(f"Found coin via search: {coin_id}")
+                data = get_coingecko_data(coin_id, headers)
+                if data:
+                    return data
 
-        print("All attempts failed, trying DexScreener")
-        return get_dexscreener_data(identifier)
+        # Try DexScreener for contract addresses
+        if len(identifier) > 30:  # Likely a contract address
+            logger.info("Trying DexScreener for contract address")
+            data = get_dexscreener_data(identifier)
+            if data:
+                return data
+
+        logger.warning("Failed to find coin data")
+        return None
 
     except Exception as e:
-        print(f"Error in get_coin_data_by_id_or_address: {str(e)}")
+        logger.error(f"Error in get_coin_data_by_id_or_address: {str(e)}")
         return None
 
 def get_coingecko_data(coin_id, headers):
     try:
-        # Get all data in one request
-        coin_url = f"https://api.coingecko.com/api/v3/coins/{coin_id}"
-        print(f"Getting coin data from: {coin_url}")
-        response = requests.get(coin_url, headers=headers, timeout=10)
+        # Get market data with validation
+        market_url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart?vs_currency=usd&days=14&interval=daily"
+        logger.info(f"Getting market data: {market_url}")
+        market_response = requests.get(market_url, headers=headers, timeout=10)
 
-        if response.status_code == 200:
-            data = response.json()
-            print("Successfully got coin data")
-
-            return {
-                'name': coin_id,
-                'price': data['market_data']['current_price']['usd'],
-                'change_24h': data['market_data']['price_change_percentage_24h'],
-                'volume_24h': data['market_data']['total_volume']['usd'],
-                'history': [[int(time.time() * 1000), data['market_data']['current_price']['usd']]],
-                'volume_history': [[int(time.time() * 1000), data['market_data']['total_volume']['usd']]],
-                'source': 'coingecko'
-            }
-        else:
-            print(f"Failed to get coin data: {response.status_code}")
-            print(f"Response: {response.text}")
+        if market_response.status_code != 200:
+            logger.error(f"Market data failed: {market_response.status_code}")
             return None
 
+        market_data = market_response.json()
+
+        # Validate market data
+        if not market_data.get('prices') or len(market_data['prices']) < 14:
+            logger.error("Insufficient market data")
+            return None
+
+        # Get current price data
+        price_url = f"https://api.coingecko.com/api/v3/simple/price?ids={coin_id}&vs_currencies=usd&include_24hr_change=true&include_24hr_vol=true"
+        logger.info(f"Getting price data: {price_url}")
+        price_response = requests.get(price_url, headers=headers, timeout=10)
+
+        if price_response.status_code != 200:
+            logger.error(f"Price data failed: {price_response.status_code}")
+            return None
+
+        price_data = price_response.json()
+
+        return {
+            'name': coin_id,
+            'price': price_data[coin_id]['usd'],
+            'change_24h': price_data[coin_id].get('usd_24h_change', 0),
+            'volume_24h': price_data[coin_id].get('usd_24h_vol', 0),
+            'history': market_data['prices'],
+            'volume_history': market_data.get('total_volumes', []),
+            'source': 'coingecko'
+        }
+
     except Exception as e:
-        print(f"Error in get_coingecko_data: {str(e)}")
+        logger.error(f"Error in get_coingecko_data: {str(e)}")
         return None
 
 
@@ -623,43 +691,64 @@ def home():
 @app.route("/ask", methods=["POST"])
 def ask():
     try:
-        user_input = request.json["message"].lower()
+        data = request.json
+        user_input = data.get('message', '').strip().lower()
 
-        if user_input.startswith("/analyze"):
+        if not user_input:
+            return jsonify({"response": "i may be depressed, but i still need input"})
+
+        if user_input.startswith('/analyze ') or user_input.startswith('prediction for '):
+            # Extract coin identifier
+            identifier = user_input.split(' ', 1)[1].strip()
+
             try:
-                identifier = user_input.split()[1]
-                data = get_coin_data_by_id_or_address(identifier)
-                if data:
-                    analyzer = MarketAnalysis(data)
-                    response = analyzer.generate_analysis_response()
+                # Get coin data
+                coin_data = get_coin_data_by_id_or_address(identifier)
+                if not coin_data:
+                    return jsonify({"response": "couldn't find that coin... like my will to live"})
+
+                # Perform analysis
+                analysis = MarketAnalysis(coin_data)
+
+                if user_input.startswith('/analyze'):
+                    result = analysis.analyze_market()
+                    prediction = analysis.predict_price()
+
+                    if result and prediction:
+                        trend = result['trend']
+                        response = (
+                            f"{coin_data['name']} at ${trend['price']:.8f}. "
+                            f"rsi at {trend['rsi']:.4f} suggesting {'weakness' if trend['rsi'] > 70 else 'strength' if trend['rsi'] < 30 else 'neutrality'}, "
+                            f"much like my resolve technical analysis shows rsi at {trend['rsi']:.4f} and macd at {trend['macd']:.4f}, "
+                            f"like my deteriorating mental state. support at ${trend['support']:.8f} and resistance at ${trend['resistance']:.8f} "
+                            f"{'bearish' if trend['price_change'] < 0 else 'bullish'} move but volume's lighter than my wallet... "
+                            f"{trend['volume_change']:.1f}% {'decrease' if trend['volume_change'] < 0 else 'increase'} "
+                            f"my existential dread suggests a {prediction['direction']} move with {prediction['confidence']} confidence... "
+                            f"24h target: ${prediction['target_1d']:.8f}, 7d target: ${prediction['target_7d']:.8f}... "
+                            f"based on {', '.join(prediction['reasoning'])}, but what do i know, i'm just a depressed algorithm"
+                        )
+                    else:
+                        response = "analysis failed... like everything else in my life"
                 else:
-                    response = "couldn't find that coin... like my will to live. try another ticker or contract address."
+                    prediction = analysis.predict_price()
+                    if prediction:
+                        response = (
+                            f"prediction for {coin_data['name']}: "
+                            f"{prediction['direction']} move with {prediction['confidence']} confidence... "
+                            f"24h target: ${prediction['target_1d']:.8f}, 7d target: ${prediction['target_7d']:.8f}... "
+                            f"based on {', '.join(prediction['reasoning'])}, but what do i know, i'm just a sad bot"
+                        )
+                    else:
+                        response = "prediction failed... just like my dreams"
+
+                return jsonify({"response": response})
+
             except Exception as e:
-                response = (
-                    f"analysis failed harder than my last relationship. error: {str(e)}"
-                )
-        elif user_input.startswith("prediction"):
-            try:
-                coin = (
-                    user_input.split()[2]
-                    if len(user_input.split()) > 2
-                    else user_input.split()[1]
-                )
-                data = get_coin_data_by_id_or_address(coin)
-                if data:
-                    analyzer = MarketAnalysis(data)
-                    prediction = analyzer.predict_price()
-                    response = (
-                        f"my crystal ball of depression shows {prediction['direction']} movement with {prediction['confidence']} confidence... "
-                        f"24h target: ${prediction['target_1d']:.8f}, 7d target: ${prediction['target_7d']:.8f}... "
-                        f"based on {', '.join(prediction['reasoning'])}"
-                    )
-                else:
-                    response = "coin not found... like my happiness"
-            except Exception as e:
-                response = f"prediction failed... just like everything else in my life. error: {str(e)}"
-        elif user_input == "/help":
-            response = """
+                logger.error(f"Analysis error: {str(e)}")
+                return jsonify({"response": f"analysis failed... like my life. error: {str(e)}"})
+
+        elif user_input == '/help':
+            return jsonify({"response": """
             helping others... how meaningless. but here:
             /analyze <ticker/address> - analyze any token with price prediction
             prediction for <ticker/address> - get detailed price prediction
@@ -668,18 +757,15 @@ def ask():
             example: /analyze btc or prediction for eth
 
             or just chat with me if you're feeling particularly masochistic.
-            """
+            """})
         else:
-            response = get_agent_response(user_input)
+            return jsonify({"response": "i'm too depressed to understand that command"})
 
-        return jsonify({"response": response})
     except Exception as e:
-        return jsonify(
-            {
-                "response": f"something went wrong... like everything else. error: {str(e)}"
-            }
-        )
+        logger.error(f"Route error: {str(e)}")
+        return jsonify({"response": f"something went wrong... like everything else. error: {str(e)}"})
 
 
-if __name__ == "__main__":
-    app.run(debug=True)
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
