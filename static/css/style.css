@@ -1,0 +1,137 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    background: #000000;
+    color: #00ff00;
+    font-family: 'Courier New', monospace;
+    margin: 0;
+    padding: 10px;
+    height: 100vh;
+    display: flex;
+    overflow: hidden;
+    line-height: 1.4;
+}
+
+#container {
+    display: grid;
+    grid-template-rows: auto auto auto 1fr auto;
+    height: 100%;
+    max-height: 100vh;
+    gap: 10px;
+    max-width: 1200px;
+    margin: 0 auto;
+    border: 1px solid #00ff00;
+    padding: 15px;
+    border-radius: 4px;
+    width: 100%;
+}
+
+.ascii-art {
+    white-space: pre;
+    font-family: monospace;
+    color: #00ff00;
+    text-align: center;
+    font-size: 12px;
+    margin-bottom: 10px;
+    line-height: 1.2;
+}
+
+.commands {
+    font-size: 14px;
+    margin: 5px 0;
+    padding: 10px;
+    border: 1px solid #00ff00;
+    border-radius: 4px;
+}
+
+#quick-analyze {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 5px;
+    margin: 5px 0;
+}
+
+button {
+    padding: 8px;
+    background: transparent;
+    border: 1px solid #00ff00;
+    color: #00ff00;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+    transition: all 0.2s ease;
+}
+
+button:hover {
+    background: #00ff00;
+    color: #000000;
+    box-shadow: 0 0 10px #00ff00;
+}
+
+#chat-log {
+    height: 100%;
+    min-height: 400px;
+    overflow-y: auto;
+    padding: 10px;
+    border: 1px solid #00ff00;
+    border-radius: 4px;
+    margin: 5px 0;
+    font-size: 14px;
+    background: rgba(0, 255, 0, 0.05);
+}
+
+#input-container {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 5px;
+}
+
+#user-input {
+    padding: 8px;
+    background: transparent;
+    border: 1px solid #00ff00;
+    color: #00ff00;
+    border-radius: 4px;
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+}
+
+#user-input:focus {
+    outline: none;
+    box-shadow: 0 0 10px #00ff00;
+}
+
+.message {
+    margin: 5px 0;
+    padding: 5px;
+    border-radius: 4px;
+}
+
+.user {
+    color: #00ff00;
+}
+
+.agent {
+    color: #00cc00;
+}
+
+.typing {
+    color: #008800;
+    font-style: italic;
+}
+
+/* Matrix-style animation */
+@keyframes glitch {
+    0% { text-shadow: 0 0 2px #00ff00; }
+    50% { text-shadow: 0 0 5px #00ff00; }
+    100% { text-shadow: 0 0 2px #00ff00; }
+}
+
+.ascii-art {
+    animation: glitch 2s infinite;
+}

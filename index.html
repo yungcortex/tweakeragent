@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>TweakerAgent Analysis Terminal</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div id="container">
+        <div class="ascii-art">
+┌──────────────────────┐
+│  ▀▀▀ TWEAKER ▀▀▀    │
+│  ┌─────────────┐    │
+│  │    ┌──┐     │    │
+│  │    │▼▼│     │    │
+│  │    └──┘     │    │
+│  └─────────────┘    │
+│      V.2.1          │
+│   NEURAL CORE       │
+└──────────────────────┘
+        </div>
+        
+        <div class="commands">
+            Available Commands:
+            • /analyze &lt;ticker/address&gt; - Full market analysis with prediction
+            • prediction for &lt;ticker/address&gt; - Detailed price prediction
+            • /help - Show all commands
+        </div>
+        
+        <div class="popular-tokens">
+            <button class="token-button" onclick="analyzeToken('btc')">Bitcoin (BTC)</button>
+            <button class="token-button" onclick="analyzeToken('eth')">Ethereum (ETH)</button>
+            <button class="token-button" onclick="analyzeToken('sol')">Solana (SOL)</button>
+            <button class="token-button" onclick="analyzeToken('bnb')">BNB</button>
+            <button class="token-button" onclick="analyzeToken('xrp')">XRP</button>
+            <button class="token-button" onclick="analyzeToken('doge')">Dogecoin</button>
+        </div>
+        
+        <div id="chat-log"></div>
+        
+        <div id="input-container">
+            <input type="text" id="user-input" placeholder="Type /analyze btc or /help...">
+            <button onclick="sendMessage()">Send</button>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>
