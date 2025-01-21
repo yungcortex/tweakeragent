@@ -82,8 +82,7 @@ class TechnicalAnalysis:
             rsi[i] = 100. - 100./(1. + rs)
         
         return rsi[-1]
-    
-    def calculate_macd(self, fast=12, slow=26, signal=9):
+        def calculate_macd(self, fast=12, slow=26, signal=9):
         exp1 = np.exp(self.prices).ewm(span=fast, adjust=False).mean()
         exp2 = np.exp(self.prices).ewm(span=slow, adjust=False).mean()
         macd = exp1 - exp2
@@ -119,6 +118,7 @@ class TechnicalAnalysis:
             support = levels[levels < mean]
             return {'support': sorted(support), 'resistance': sorted(resistance)}
         return {'support': [], 'resistance': []}
+
 class MarketAnalysis:
     def __init__(self, data):
         self.data = data
@@ -169,8 +169,7 @@ class MarketAnalysis:
                 'patterns': []
             }
         }
-
-    def predict_price(self):
+        def predict_price(self):
         # Calculate various technical indicators for prediction
         rsi = self.technical.calculate_rsi()
         macd = self.technical.calculate_macd()
@@ -240,53 +239,57 @@ class MarketAnalysis:
         }
 
     def generate_analysis_response(self):
-        analysis = self.analyze_market_structure()
-        metrics = analysis['metrics']
-        prediction = self.predict_price()
-        
-        # Format response data
-        response_data = {
-            'percent_change': f"{metrics['percent_change']:.1f}",
-            'volume_change': f"{metrics['volume_change']:.1f}",
-            'rsi': f"{metrics['rsi']:.0f}",
-            'macd_value': f"{metrics['macd']:.4f}",
-            'support': f"${metrics['support']:.8f}",
-            'resistance': f"${metrics['resistance']:.8f}",
-            'price_level': f"${metrics['price']:.8f}"
-        }
+        try:
+            analysis = self.analyze_market_structure()
+            metrics = analysis['metrics']
+            prediction = self.predict_price()
+            
+            # Format response data
+            response_data = {
+                'percent_change': f"{metrics['percent_change']:.1f}",
+                'volume_change': f"{metrics['volume_change']:.1f}",
+                'rsi': f"{metrics['rsi']:.0f}",
+                'macd_value': f"{metrics['macd']:.4f}",
+                'support': f"${metrics['support']:.8f}",
+                'resistance': f"${metrics['resistance']:.8f}",
+                'price_level': f"${metrics['price']:.8f}"
+            }
 
-        # Build comprehensive analysis
-        responses = []
-        
-        # 1. Current state
-        trend_response = self.responses.trend_responses[analysis['trend']]
-        responses.append(random.choice(trend_response).format(**response_data))
-        
-        # 2. Technical Analysis
-        responses.append(f"technical analysis shows RSI at {response_data['rsi']} and MACD at {response_data['macd_value']}, "
-                        f"like my deteriorating mental state. support at {response_data['support']} and resistance at {response_data['resistance']}")
-        
-        # 3. Volume Analysis
-        volume_state = "high_volume" if abs(metrics['volume_change']) > 20 else "low_volume"
-        volume_trend = "bullish" if 'bull' in analysis['trend'] else 'bearish'
-        volume_key = f"{volume_state}_{volume_trend}"
-        if volume_key in self.responses.volume_analysis:
-            responses.append(random.choice(self.responses.volume_analysis[volume_key]).format(**response_data))
-        
-        # 4. Price Prediction
-        prediction_text = (
-            f"my existential dread suggests a {prediction['direction']} move with {prediction['confidence']} confidence... "
-            f"24h target: ${prediction['target_1d']:.8f}, 7d target: ${prediction['target_7d']:.8f}... "
-            f"based on {', '.join(prediction['reasoning'])}, but what do i know, i'm just a depressed algorithm"
-        )
-        responses.append(prediction_text)
+            # Build comprehensive analysis
+            responses = []
+            
+            # 1. Current state
+            trend_response = self.responses.trend_responses[analysis['trend']]
+            responses.append(random.choice(trend_response).format(**response_data))
+            
+            # 2. Technical Analysis
+            responses.append(f"technical analysis shows RSI at {response_data['rsi']} and MACD at {response_data['macd_value']}, "
+                            f"like my deteriorating mental state. support at {response_data['support']} and resistance at {response_data['resistance']}")
+            
+            # 3. Volume Analysis
+            volume_state = "high_volume" if abs(metrics['volume_change']) > 20 else "low_volume"
+            volume_trend = "bullish" if 'bull' in analysis['trend'] else 'bearish'
+            volume_key = f"{volume_state}_{volume_trend}"
+            if volume_key in self.responses.volume_analysis:
+                responses.append(random.choice(self.responses.volume_analysis[volume_key]).format(**response_data))
+            
+            # 4. Price Prediction
+            prediction_text = (
+                f"my existential dread suggests a {prediction['direction']} move with {prediction['confidence']} confidence... "
+                f"24h target: ${prediction['target_1d']:.8f}, 7d target: ${prediction['target_7d']:.8f}... "
+                f"based on {', '.join(prediction['reasoning'])}, but what do i know, i'm just a depressed algorithm"
+            )
+            responses.append(prediction_text)
 
-        # Combine responses
-        final_response = f"{self.data['name'].upper()} at {response_data['price_level']}. "
-        final_response += " ".join(responses)
-        
-        return final_response.lower()
-    def get_coin_data_by_id_or_address(identifier):
+            # Combine responses
+            final_response = f"{self.data['name'].upper()} at {response_data['price_level']}. "
+            final_response += " ".join(responses)
+            
+            return final_response.lower()
+        except Exception as e:
+            print(f"Error in generate_analysis_response: {str(e)}")
+            return "analysis failed... like everything else in my life"
+        def get_coin_data_by_id_or_address(identifier):
     try:
         print(f"Attempting to get data for {identifier}")  # Debug log
         
