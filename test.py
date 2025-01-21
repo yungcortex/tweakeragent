@@ -384,7 +384,7 @@ class MarketAnalysis:
             current_price = float(self.coin_data['price'])
             price_change = float(self.coin_data['change_24h'])
             volume_24h = float(self.coin_data['volume_24h'])
-            
+
             # Basic analysis
             trend = {
                 'price': current_price,
@@ -395,9 +395,9 @@ class MarketAnalysis:
                 'support': current_price * 0.95,
                 'resistance': current_price * 1.05
             }
-            
+
             return {'trend': trend}
-            
+
         except Exception as e:
             logger.error(f"Market analysis error: {str(e)}")
             return None
@@ -410,14 +410,14 @@ class MarketAnalysis:
 
             trend = result['trend']
             current_price = trend['price']
-            
+
             # Simple prediction
             direction = 'bullish' if trend['price_change'] > 0 else 'bearish'
             confidence = 'medium'
-            
+
             target_1d = current_price * (1 + (0.01 * (1 if direction == 'bullish' else -1)))
             target_7d = current_price * (1 + (0.03 * (1 if direction == 'bullish' else -1)))
-            
+
             reasoning = [
                 f"price {'up' if direction == 'bullish' else 'down'} {abs(trend['price_change']):.1f}%"
             ]
@@ -771,7 +771,7 @@ def ask():
     try:
         data = request.json
         user_input = data.get('message', '').strip().lower()
-        
+
         if not user_input:
             return jsonify({"response": get_character_response("error")})
 
@@ -779,74 +779,92 @@ def ask():
         if user_input.startswith('/analyze '):
             identifier = user_input.split(' ', 1)[1].strip()
             logger.info(f"Analyzing {identifier}")
-            
+
             try:
-                # Get coin data from Binance
+                # Try DexScreener first
+                dex_url = f"https://api.dexscreener.com/latest/dex/search?q={identifier}"
+                response = requests.get(dex_url, timeout=10)
+
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get('pairs') and len(data['pairs']) > 0:
+                        # Get the most liquid pair
+                        pair = max(data['pairs'], key=lambda x: float(x.get('liquidity', {}).get('usd', 0)))
+
+                        price = float(pair['priceUsd'])
+                        change_24h = float(pair.get('priceChange', {}).get('h24', 0))
+                        volume_24h = float(pair.get('volume', {}).get('h24', 0))
+                        liquidity = float(pair.get('liquidity', {}).get('usd', 0))
+
+                        # Generate response with more details
+                        sentiment = 'bullish' if change_24h > 0 else 'bearish'
+                        response = (
+                            f"{get_character_response('analysis_intros')} "
+                            f"{pair['baseToken']['symbol']} at ${price:.8f}... "
+                            f"*stares at charts* {change_24h:.2f}% {sentiment} in 24h... "
+                            f"volume at ${volume_24h:,.2f}... "
+                            f"liquidity at ${liquidity:,.2f}... "
+                        )
+
+                        # Add extra context based on metrics
+                        if liquidity < 10000:
+                            response += "*squints* liquidity looking thinner than my will to live... "
+                        if volume_24h < 1000:
+                            response += "volume's dead as my dreams... "
+                        if abs(change_24h) > 20:
+                            response += f"{'pumping' if change_24h > 0 else 'dumping'} harder than my life decisions... "
+
+                        response += "*goes back to contemplating existence*"
+
+                        return jsonify({"response": response})
+
+                # Fallback to Binance for major coins
                 symbol = identifier.upper() + "USDT"
                 binance_url = "https://api.binance.com/api/v3"
-                
-                # Get current price
+
                 ticker_response = requests.get(f"{binance_url}/ticker/24hr?symbol={symbol}", timeout=5)
-                if ticker_response.status_code != 200:
-                    return jsonify({"response": get_character_response("not_found")})
-                    
-                ticker_data = ticker_response.json()
-                
-                # Get historical data
-                klines_response = requests.get(f"{binance_url}/klines?symbol={symbol}&interval=1d&limit=30", timeout=5)
-                if klines_response.status_code != 200:
-                    return jsonify({"response": get_character_response("error")})
-                    
-                klines = klines_response.json()
-                
-                # Format the data
-                coin_data = {
-                    'name': identifier.upper(),
-                    'price': float(ticker_data['lastPrice']),
-                    'change_24h': float(ticker_data['priceChangePercent']),
-                    'volume_24h': float(ticker_data['volume']),
-                    'history': [[int(k[0]), float(k[4])] for k in klines],
-                    'volume_history': [[int(k[0]), float(k[5])] for k in klines]
-                }
-                
-                # Generate analysis response
-                price = coin_data['price']
-                change = coin_data['change_24h']
-                volume = coin_data['volume_24h']
-                
-                sentiment = 'bullish' if change > 0 else 'bearish'
-                
-                response = (
-                    f"{get_character_response('analysis_intros')} "
-                    f"{coin_data['name']} at ${price:.8f}... "
-                    f"*stares at charts* {change:.2f}% {sentiment} in 24h... "
-                    f"volume at ${volume:.2f}... "
-                    f"*goes back to contemplating existence*"
-                )
-                
-                return jsonify({"response": response})
-                
+                if ticker_response.status_code == 200:
+                    ticker_data = ticker_response.json()
+
+                    price = float(ticker_data['lastPrice'])
+                    change = float(ticker_data['priceChangePercent'])
+                    volume = float(ticker_data['volume'])
+
+                    sentiment = 'bullish' if change > 0 else 'bearish'
+                    response = (
+                        f"{get_character_response('analysis_intros')} "
+                        f"{identifier.upper()} at ${price:.8f}... "
+                        f"*stares at charts* {change:.2f}% {sentiment} in 24h... "
+                        f"volume at ${volume:.2f}... "
+                        f"*goes back to contemplating existence*"
+                    )
+
+                    return jsonify({"response": response})
+
+                return jsonify({"response": get_character_response("not_found")})
+
             except Exception as e:
                 logger.error(f"Analysis error: {str(e)}")
                 return jsonify({"response": get_character_response("error")})
-                
+
         # Handle help command
         elif user_input == '/help':
             return jsonify({"response": """
             *sighs deeply* here's what I can do in my eternal suffering:
-            
-            /analyze <ticker> - full market analysis with my depressing insights
+
+            /analyze <token> - analyze any token (memecoins included) with my depressing insights
             /help - you're looking at it, unfortunately
-            
+
             example: /analyze btc
-            
+            or: /analyze 0x... (contract address)
+
             or just chat with me if you're feeling particularly masochistic.
             """})
-            
+
         # Handle chat
         else:
             return jsonify({"response": get_character_response("chat_responses", "default")})
-            
+
     except Exception as e:
         logger.error(f"Route error: {str(e)}")
         return jsonify({"response": get_character_response("error")})
