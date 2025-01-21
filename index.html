@@ -220,6 +220,57 @@
                 font-size: 16px !important;
             }
         }
+
+        @media (max-width: 430px) {
+            .chat-container {
+                font-size: 16px;  /* Bigger text */
+                margin-bottom: 60px;  /* More space for input */
+                height: calc(100vh - 280px);  /* Adjust height to move up */
+            }
+
+            .message {
+                font-size: 16px;
+                margin-bottom: 15px;
+            }
+
+            .input-container {
+                position: fixed;
+                bottom: env(safe-area-inset-bottom, 20px);
+                left: 0;
+                right: 0;
+                padding: 15px;
+                background-color: black;
+                z-index: 1000;
+            }
+
+            #userInput {
+                font-size: 16px;
+                padding: 12px;
+                height: 45px;
+            }
+
+            button {
+                font-size: 16px;
+                padding: 12px 20px;
+                height: 45px;
+            }
+
+            .commands {
+                font-size: 14px;  /* Bigger command text */
+            }
+
+            .coin-button {
+                font-size: 14px;  /* Bigger button text */
+                padding: 10px 5px;
+            }
+        }
+
+        /* iPhone SE and smaller devices */
+        @media (max-width: 375px) {
+            .chat-container {
+                height: calc(100vh - 260px);  /* Slightly smaller for tiny screens */
+            }
+        }
     </style>
 </head>
 <body>
