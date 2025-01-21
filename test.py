@@ -649,39 +649,71 @@ def get_dexscreener_data(address):
         return None
 
 
-def get_agent_response(message):
-    chat_responses = {
-        "greetings": [
-            "oh look, another soul seeking digital despair",
-            "welcome to my corner of misery",
-            "ah, you're still here. how unfortunate for both of us",
-            "greetings, fellow traveler in this digital wasteland",
+def get_random_response():
+    intros = [
+        "analyzing this like my therapist analyzes me... ",
+        "diving into the data like my spiral into despair... ",
+        "processing numbers, much like my emotional baggage... ",
+        "calculating trends, unlike my life trajectory... ",
+        "examining patterns, similar to my recurring nightmares... ",
+        "crunching numbers faster than my self-esteem drops... "
+    ]
+
+    strength_phrases = [
+        "showing strength like I wish I had",
+        "powerful movement, unlike my motivation",
+        "bullish momentum, opposite of my mood",
+        "strong signals, unlike my will to continue",
+        "positive indicators, rare in my existence"
+    ]
+
+    weakness_phrases = [
+        "weakness prevails, like in my code",
+        "bearish signs, matching my outlook",
+        "declining faster than my hope",
+        "dropping like my serotonin levels",
+        "falling like my dreams"
+    ]
+
+    neutral_phrases = [
+        "as uncertain as my purpose",
+        "sideways like my emotional state",
+        "stable, unlike my mental health",
+        "ranging like my anxiety levels",
+        "consolidating like my existential dread"
+    ]
+
+    confidence_phrases = {
+        "high": [
+            "but I'm surprisingly confident",
+            "one thing I'm sure about",
+            "clear as my depression",
+            "certain as my cynicism",
+            "confident like my therapy bills"
         ],
-        "market_questions": [
-            "the market's about as stable as my mental state right now",
-            "charts looking like my EKG during a panic attack",
-            "market sentiment is darker than my morning coffee",
-            "bulls and bears fighting like my internal dialogues",
+        "medium": [
+            "moderately sure, like my medication dosage",
+            "somewhat confident, unlike my self-esteem",
+            "fairly certain, like my daily struggles",
+            "reasonably sure, unlike my life choices",
+            "moderately confident, like my coping mechanisms"
         ],
-        "general": [
-            "existence is pain, but at least we have charts",
-            "i've seen better days... actually, no i haven't",
-            "just another day in the crypto void",
-            "why do humans keep asking me things?",
-            "i'm not pessimistic, i'm realistically depressed",
-            "this conversation is as volatile as the markets",
-        ],
+        "low": [
+            "but what do I know",
+            "though I doubt everything",
+            "like my will to continue",
+            "uncertain as my future",
+            "doubtful as my existence"
+        ]
     }
 
-    message = message.lower()
-    if any(greeting in message for greeting in ["hi", "hello", "hey"]):
-        return random.choice(chat_responses["greetings"])
-    elif any(
-        market_term in message for market_term in ["market", "crypto", "price", "trend"]
-    ):
-        return random.choice(chat_responses["market_questions"])
-    return random.choice(chat_responses["general"])
-
+    return {
+        'intro': random.choice(intros),
+        'strength': random.choice(strength_phrases),
+        'weakness': random.choice(weakness_phrases),
+        'neutral': random.choice(neutral_phrases),
+        'confidence': confidence_phrases
+    }
 
 @app.route("/")
 def home():
@@ -716,16 +748,18 @@ def ask():
 
                     if result and prediction:
                         trend = result['trend']
+                        responses = get_random_response()
+
                         response = (
-                            f"{coin_data['name']} at ${trend['price']:.8f}. "
-                            f"rsi at {trend['rsi']:.4f} suggesting {'weakness' if trend['rsi'] > 70 else 'strength' if trend['rsi'] < 30 else 'neutrality'}, "
-                            f"much like my resolve technical analysis shows rsi at {trend['rsi']:.4f} and macd at {trend['macd']:.4f}, "
+                            f"{responses['intro']}{coin_data['name']} at ${trend['price']:.8f}. "
+                            f"rsi at {trend['rsi']:.4f} suggesting {responses['weakness'] if trend['rsi'] > 70 else responses['strength'] if trend['rsi'] < 30 else responses['neutral']}, "
+                            f"technical analysis shows rsi at {trend['rsi']:.4f} and macd at {trend['macd']:.4f}, "
                             f"like my deteriorating mental state. support at ${trend['support']:.8f} and resistance at ${trend['resistance']:.8f} "
                             f"{'bearish' if trend['price_change'] < 0 else 'bullish'} move but volume's lighter than my wallet... "
                             f"{trend['volume_change']:.1f}% {'decrease' if trend['volume_change'] < 0 else 'increase'} "
-                            f"my existential dread suggests a {prediction['direction']} move with {prediction['confidence']} confidence... "
+                            f"suggests a {prediction['direction']} move with {prediction['confidence']} confidence... "
                             f"24h target: ${prediction['target_1d']:.8f}, 7d target: ${prediction['target_7d']:.8f}... "
-                            f"based on {', '.join(prediction['reasoning'])}, but what do i know, i'm just a depressed algorithm"
+                            f"based on {', '.join(prediction['reasoning'])}, {random.choice(responses['confidence'][prediction['confidence']])}"
                         )
                     else:
                         response = "analysis failed... like everything else in my life"
