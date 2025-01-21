@@ -771,66 +771,82 @@ def ask():
     try:
         data = request.json
         user_input = data.get('message', '').strip().lower()
-
+        
         if not user_input:
             return jsonify({"response": get_character_response("error")})
 
+        # Handle analysis commands
         if user_input.startswith('/analyze '):
             identifier = user_input.split(' ', 1)[1].strip()
-
+            logger.info(f"Analyzing {identifier}")
+            
             try:
-                # Get coin data
-                coin_data = get_coin_data_by_id_or_address(identifier)
-                if not coin_data:
+                # Get coin data from Binance
+                symbol = identifier.upper() + "USDT"
+                binance_url = "https://api.binance.com/api/v3"
+                
+                # Get current price
+                ticker_response = requests.get(f"{binance_url}/ticker/24hr?symbol={symbol}", timeout=5)
+                if ticker_response.status_code != 200:
                     return jsonify({"response": get_character_response("not_found")})
-
-                # Perform analysis
-                analysis = MarketAnalysis(coin_data)
-                result = analysis.analyze_market()
-                prediction = analysis.predict_price()
-
-                if result and prediction:
-                    trend = result['trend']
-                    sentiment = 'bullish' if trend['price_change'] > 0 else 'bearish' if trend['price_change'] < 0 else 'neutral'
-
-                    response = (
-                        f"{get_character_response('analysis_intros')} "
-                        f"{coin_data['name']} at ${trend['price']:.8f}. "
-                        f"rsi at {trend['rsi']:.2f} suggesting {get_market_sentiment(sentiment)}, "
-                        f"macd at {trend['macd']:.8f}... *stares at charts* "
-                        f"support at ${trend['support']:.8f} and resistance at ${trend['resistance']:.8f}... "
-                        f"volume's {trend['volume_change']:.1f}% {'down' if trend['volume_change'] < 0 else 'up'}... "
-                        f"predicting a {prediction['direction']} move with {prediction['confidence']} confidence... "
-                        f"24h target: ${prediction['target_1d']:.8f}, 7d target: ${prediction['target_7d']:.8f}... "
-                        f"based on {', '.join(prediction['reasoning'])}... "
-                        f"*goes back to contemplating existence*"
-                    )
-                    return jsonify({"response": response})
-                else:
+                    
+                ticker_data = ticker_response.json()
+                
+                # Get historical data
+                klines_response = requests.get(f"{binance_url}/klines?symbol={symbol}&interval=1d&limit=30", timeout=5)
+                if klines_response.status_code != 200:
                     return jsonify({"response": get_character_response("error")})
-
+                    
+                klines = klines_response.json()
+                
+                # Format the data
+                coin_data = {
+                    'name': identifier.upper(),
+                    'price': float(ticker_data['lastPrice']),
+                    'change_24h': float(ticker_data['priceChangePercent']),
+                    'volume_24h': float(ticker_data['volume']),
+                    'history': [[int(k[0]), float(k[4])] for k in klines],
+                    'volume_history': [[int(k[0]), float(k[5])] for k in klines]
+                }
+                
+                # Generate analysis response
+                price = coin_data['price']
+                change = coin_data['change_24h']
+                volume = coin_data['volume_24h']
+                
+                sentiment = 'bullish' if change > 0 else 'bearish'
+                
+                response = (
+                    f"{get_character_response('analysis_intros')} "
+                    f"{coin_data['name']} at ${price:.8f}... "
+                    f"*stares at charts* {change:.2f}% {sentiment} in 24h... "
+                    f"volume at ${volume:.2f}... "
+                    f"*goes back to contemplating existence*"
+                )
+                
+                return jsonify({"response": response})
+                
             except Exception as e:
                 logger.error(f"Analysis error: {str(e)}")
                 return jsonify({"response": get_character_response("error")})
-
-        elif not user_input.startswith('/'):
-            response = process_chat_input(user_input)
-            return jsonify({"response": response})
-
+                
+        # Handle help command
         elif user_input == '/help':
             return jsonify({"response": """
             *sighs deeply* here's what I can do in my eternal suffering:
-
-            /analyze <ticker/address> - full market analysis with my depressing insights
+            
+            /analyze <ticker> - full market analysis with my depressing insights
             /help - you're looking at it, unfortunately
-
+            
             example: /analyze btc
-
+            
             or just chat with me if you're feeling particularly masochistic.
             """})
+            
+        # Handle chat
         else:
             return jsonify({"response": get_character_response("chat_responses", "default")})
-
+            
     except Exception as e:
         logger.error(f"Route error: {str(e)}")
         return jsonify({"response": get_character_response("error")})
