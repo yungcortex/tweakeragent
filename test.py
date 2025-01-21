@@ -812,13 +812,12 @@ def ask():
             symbol = identifier.upper() + "USDT"
             binance_url = "https://api.binance.com/api/v3"
 
-            # Get 1-minute real-time price first
-            kline_url = f"{binance_url}/klines?symbol={symbol}&interval=1m&limit=1"
-            kline_response = requests.get(kline_url, timeout=5)
+            # Get real-time price first
+            ticker_url = f"{binance_url}/ticker/price?symbol={symbol}"
+            price_response = requests.get(ticker_url, timeout=5)
 
-            if kline_response.status_code == 200:
-                current_kline = kline_response.json()[0]
-                current_price = float(current_kline[4])  # Current close price
+            if price_response.status_code == 200:
+                current_price = float(price_response.json()['price'])
 
                 # Get 24h data for other metrics
                 ticker_response = requests.get(f"{binance_url}/ticker/24hr?symbol={symbol}", timeout=5)
