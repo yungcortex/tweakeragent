@@ -772,9 +772,6 @@ def ask():
         data = request.json
         user_input = data.get('message', '').strip().lower()
 
-        if not user_input:
-            return jsonify({"response": get_character_response("error")})
-
         if user_input.startswith('/analyze '):
             identifier = user_input.split(' ', 1)[1].strip()
             logger.info(f"Analyzing {identifier}")
@@ -796,40 +793,38 @@ def ask():
 
                         sentiment = 'bullish' if change_24h > 0 else 'bearish'
 
-                        # Format response with line breaks and more analytics
+                        # Format response with clean line breaks
                         response_parts = [
-                            f"{get_character_response('analysis_intros')}",
-                            f"\n🎯 {pair['baseToken']['symbol']} Analysis:",
-                            f"\nPrice: ${price:.8f}",
-                            f"\n24h Change: {change_24h:.2f}% ({sentiment})",
-                            f"\n24h Volume: ${volume_24h:,.2f}",
-                            f"\nLiquidity: ${liquidity:,.2f}",
-                            "\n",
-                            "\n📊 Market Metrics:",
+                            f"Analyzing market data for {pair['baseToken']['symbol']}...\n",
+                            f"Price: ${price:.8f}\n",
+                            f"24h Change: {change_24h:.2f}% ({sentiment})\n",
+                            f"24h Volume: ${volume_24h:,.2f}\n",
+                            f"Liquidity: ${liquidity:,.2f}\n",
+                            "\nMarket Analysis:\n",
                         ]
 
                         # Add market health indicators
                         if liquidity > 100000:
-                            response_parts.append(f"\n• Healthy liquidity pool")
+                            response_parts.append("• Strong liquidity position\n")
                         else:
-                            response_parts.append(f"\n• Low liquidity - trade with caution")
+                            response_parts.append("• Limited liquidity - exercise caution\n")
 
                         if volume_24h > liquidity * 0.1:
-                            response_parts.append(f"\n• High volume/liquidity ratio - active trading")
+                            response_parts.append("• High trading activity relative to liquidity\n")
                         else:
-                            response_parts.append(f"\n• Low trading activity")
+                            response_parts.append("• Low trading volume indicates reduced market activity\n")
 
                         if abs(change_24h) > 10:
-                            response_parts.append(f"\n• High volatility detected")
+                            response_parts.append("• Significant price volatility detected\n")
 
-                        # Add trading suggestion
-                        response_parts.append("\n\n💡 Trading Outlook:")
+                        # Add trading analysis
+                        response_parts.append("\nMarket Outlook:\n")
                         if change_24h > 0 and volume_24h > liquidity * 0.1:
-                            response_parts.append("\n• Momentum appears strong")
+                            response_parts.append("• Strong upward momentum with good volume support")
                         elif change_24h < 0 and volume_24h > liquidity * 0.1:
-                            response_parts.append("\n• Showing selling pressure")
+                            response_parts.append("• Downward pressure with notable selling volume")
                         else:
-                            response_parts.append("\n• Consolidating/ranging")
+                            response_parts.append("• Market in consolidation phase")
 
                         response = "".join(response_parts)
                         return jsonify({"response": response})
@@ -849,50 +844,25 @@ def ask():
                     sentiment = 'bullish' if change > 0 else 'bearish'
 
                     response_parts = [
-                        f"{get_character_response('analysis_intros')}",
-                        f"\n🎯 {identifier.upper()} Analysis:",
-                        f"\nPrice: ${price:.8f}",
-                        f"\n24h Change: {change:.2f}% ({sentiment})",
-                        f"\n24h Volume: ${volume:,.2f}",
-                        "\n",
-                        "\n📊 Market Metrics:",
-                        f"\n• Trading volume is {volume:,.2f} USDT",
-                        f"\n• Market sentiment is {sentiment}",
-                        "\n\n💡 Trading Outlook:",
-                        f"\n• {identifier.upper()} is showing {sentiment} momentum"
+                        f"Analyzing market data for {identifier.upper()}...\n",
+                        f"Price: ${price:.8f}\n",
+                        f"24h Change: {change:.2f}% ({sentiment})\n",
+                        f"24h Volume: ${volume:,.2f}\n",
+                        "\nMarket Analysis:\n",
+                        f"• Trading volume indicates {volume:,.2f} USDT in 24h\n",
+                        f"• Market sentiment trending {sentiment}\n",
+                        "\nMarket Outlook:\n",
+                        f"• {identifier.upper()} showing {sentiment} price action with {'strong' if abs(change) > 5 else 'moderate'} momentum"
                     ]
 
                     response = "".join(response_parts)
                     return jsonify({"response": response})
 
-                return jsonify({"response": get_character_response("not_found")})
+                return jsonify({"response": "Unable to find market data for this token."})
 
             except Exception as e:
                 logger.error(f"Analysis error: {str(e)}")
-                return jsonify({"response": get_character_response("error")})
-
-
-        # Handle help command
-        elif user_input == '/help':
-            return jsonify({"response": """
-            *sighs deeply* here's what I can do in my eternal suffering:
-
-            /analyze <token> - analyze any token (memecoins included) with my depressing insights
-            /help - you're looking at it, unfortunately
-
-            example: /analyze btc
-            or: /analyze 0x... (contract address)
-
-            or just chat with me if you're feeling particularly masochistic.
-            """})
-
-        # Handle chat
-        else:
-            return jsonify({"response": get_character_response("chat_responses", "default")})
-
-    except Exception as e:
-        logger.error(f"Route error: {str(e)}")
-        return jsonify({"response": get_character_response("error")})
+                return jsonify({"response": "Error processing market analysis."})
 
 class MarketAnalysis:
     def __init__(self, coin_data):
