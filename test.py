@@ -9,6 +9,7 @@ from collections import defaultdict
 from flask_cors import CORS
 import logging
 import os
+from .character_config import get_character_response, get_market_sentiment
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
@@ -784,7 +785,17 @@ def ask():
         user_input = data.get('message', '').strip().lower()
 
         if not user_input:
-            return jsonify({"response": "i may be depressed, but i still need input"})
+            return jsonify({"response": get_character_response("error")})
+
+        # Handle basic chat interactions
+        if user_input in ['hi', 'hello', 'hey']:
+            return jsonify({"response": get_character_response("chat_responses", "hello")})
+
+        if 'how are you' in user_input:
+            return jsonify({"response": get_character_response("chat_responses", "how_are_you")})
+
+        if any(word in user_input for word in ['thanks', 'thank you', 'thx']):
+            return jsonify({"response": get_character_response("chat_responses", "thanks")})
 
         if user_input.startswith('/analyze ') or user_input.startswith('prediction for '):
             # Extract coin identifier
@@ -794,7 +805,7 @@ def ask():
                 # Get coin data
                 coin_data = get_coin_data_by_id_or_address(identifier)
                 if not coin_data:
-                    return jsonify({"response": "couldn't find that coin... like my will to live"})
+                    return jsonify({"response": get_character_response("not_found")})
 
                 # Perform analysis
                 analysis = MarketAnalysis(coin_data)
@@ -805,38 +816,39 @@ def ask():
 
                     if result and prediction:
                         trend = result['trend']
-                        responses = get_random_response()
+                        sentiment = 'bullish' if trend['price_change'] > 0 else 'bearish' if trend['price_change'] < 0 else 'neutral'
 
                         response = (
-                            f"{responses['intro']}{coin_data['name']} at ${trend['price']:.8f}. "
-                            f"rsi at {trend['rsi']:.4f} suggesting {responses['weakness'] if trend['rsi'] > 70 else responses['strength'] if trend['rsi'] < 30 else responses['neutral']}, "
-                            f"technical analysis shows rsi at {trend['rsi']:.4f} and macd at {trend['macd']:.4f}, "
-                            f"like my deteriorating mental state. support at ${trend['support']:.8f} and resistance at ${trend['resistance']:.8f} "
-                            f"{'bearish' if trend['price_change'] < 0 else 'bullish'} move but volume's lighter than my wallet... "
-                            f"{trend['volume_change']:.1f}% {'decrease' if trend['volume_change'] < 0 else 'increase'} "
-                            f"suggests a {prediction['direction']} move with {prediction['confidence']} confidence... "
+                            f"{get_character_response('analysis_intros')} {coin_data['name']} at ${trend['price']:.8f}. "
+                            f"rsi at {trend['rsi']:.4f} suggesting {get_market_sentiment(sentiment)}, "
+                            f"technical analysis shows rsi at {trend['rsi']:.4f} and macd at {trend['macd']:.4f}... "
+                            f"support at ${trend['support']:.8f} and resistance at ${trend['resistance']:.8f}... "
+                            f"volume's {trend['volume_change']:.1f}% {'down' if trend['volume_change'] < 0 else 'up'}... "
+                            f"predicting a {prediction['direction']} move with {prediction['confidence']} confidence... "
                             f"24h target: ${prediction['target_1d']:.8f}, 7d target: ${prediction['target_7d']:.8f}... "
-                            f"based on {', '.join(prediction['reasoning'])}, {random.choice(responses['confidence'][prediction['confidence']])}"
+                            f"based on {', '.join(prediction['reasoning'])}"
                         )
                     else:
-                        response = "analysis failed... like everything else in my life"
+                        response = get_character_response("error")
                 else:
+                    # Handle prediction command
                     prediction = analysis.predict_price()
                     if prediction:
                         response = (
+                            f"{get_character_response('analysis_intros')} "
                             f"prediction for {coin_data['name']}: "
                             f"{prediction['direction']} move with {prediction['confidence']} confidence... "
                             f"24h target: ${prediction['target_1d']:.8f}, 7d target: ${prediction['target_7d']:.8f}... "
-                            f"based on {', '.join(prediction['reasoning'])}, but what do i know, i'm just a sad bot"
+                            f"based on {', '.join(prediction['reasoning'])}"
                         )
                     else:
-                        response = "prediction failed... just like my dreams"
+                        response = get_character_response("error")
 
                 return jsonify({"response": response})
 
             except Exception as e:
                 logger.error(f"Analysis error: {str(e)}")
-                return jsonify({"response": f"analysis failed... like my life. error: {str(e)}"})
+                return jsonify({"response": get_character_response("error")})
 
         elif user_input == '/help':
             return jsonify({"response": """
@@ -850,11 +862,11 @@ def ask():
             or just chat with me if you're feeling particularly masochistic.
             """})
         else:
-            return jsonify({"response": "i'm too depressed to understand that command"})
+            return jsonify({"response": get_character_response("chat_responses", "default")})
 
     except Exception as e:
         logger.error(f"Route error: {str(e)}")
-        return jsonify({"response": f"something went wrong... like everything else. error: {str(e)}"})
+        return jsonify({"response": get_character_response("error")})
 
 
 if __name__ == '__main__':
