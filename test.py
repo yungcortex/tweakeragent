@@ -30,8 +30,11 @@ COINGECKO_IDS = {
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Initialize Flask app
-app = Flask(__name__)
+# Update the Flask initialization with correct paths
+app = Flask(__name__,
+           static_url_path='/static',
+           static_folder='../static',      # Go up one directory to find static folder
+           template_folder='../templates')  # Go up one directory to find templates folder
 
 # Add route for main pagev
 @app.route('/')
