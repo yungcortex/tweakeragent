@@ -39,16 +39,19 @@ body::before {
     width: 100%;
     height: 100%;
     padding: 20px;
+    min-height: 450px; /* Set minimum height to prevent overlap at this specific point */
 }
 
 /* Messages area */
 .messages {
-    height: calc(100% - 120px); /* Leave space for input */
+    height: calc(100% - 120px);
+    min-height: 300px; /* Minimum height for messages */
     border: 1px solid #00ff00;
     border-radius: 5px;
     background-color: rgba(0, 0, 0, 0.3);
     padding: 20px;
     overflow-y: auto;
+    margin-bottom: 20px;
 }
 
 /* Input area */
@@ -57,6 +60,7 @@ body::before {
     left: 20px;
     right: 20px;
     bottom: 20px;
+    min-height: 80px; /* Minimum height for input container */
     height: 80px;
     border: 1px solid #00ff00;
     border-radius: 5px;
@@ -183,4 +187,16 @@ input:focus {
 /* Placeholder text */
 ::placeholder {
     color: #004400;
+}
+
+/* Add a specific breakpoint for this window size */
+@media screen and (max-height: 450px) {
+    body {
+        min-height: 450px;
+        overflow-y: auto; /* Allow scrolling when window is too small */
+    }
+
+    .chat-container {
+        position: absolute; /* Change to absolute to allow scrolling */
+    }
 }
