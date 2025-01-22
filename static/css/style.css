@@ -37,11 +37,12 @@ body::before {
     top: 0;
     left: 0;
     right: 0;
-    bottom: 20px;
+    bottom: 0;
     display: flex;
     flex-direction: column;
     padding: 20px;
     min-height: 400px;
+    overflow: hidden;
 }
 
 /* Messages area */
@@ -58,7 +59,7 @@ body::before {
 
 /* Input area */
 .input-container {
-    position: relative;
+    flex: 0 0 auto;
     height: 80px;
     border: 1px solid #00ff00;
     border-radius: 5px;
@@ -66,7 +67,6 @@ body::before {
     padding: 20px;
     display: flex;
     gap: 10px;
-    margin-bottom: 0;
 }
 
 /* Input field */
@@ -126,19 +126,48 @@ button:hover {
     border-radius: 4px;
 }
 
-/* Mobile adjustments */
-@media (max-width: 768px) {
+/* Updated mobile breakpoints */
+@media screen and (max-height: 600px) {
+    .chat-container {
+        padding: 10px;
+    }
+
+    .messages {
+        min-height: 150px;
+        margin-bottom: 10px;
+    }
+
+    .input-container {
+        height: 60px;
+        padding: 10px;
+    }
+}
+
+@media screen and (max-width: 768px) {
     .chat-container {
         padding: 10px;
     }
 
     .input-container {
+        height: auto;
+        min-height: 60px;
         flex-direction: column;
-        min-height: 100px;
     }
 
     button {
         width: 100%;
+        height: 40px;
+    }
+}
+
+@media screen and (max-width: 480px) {
+    .messages {
+        padding: 10px;
+    }
+
+    .input-container {
+        min-height: 100px;
+        padding: 10px;
     }
 }
 
