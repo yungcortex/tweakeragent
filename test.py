@@ -1,3 +1,15 @@
+
+
+# Then update the CoinGecko API call in your route:
+if price_response.status_code == 200:
+    real_time_data = price_response.json()
+    current_price = float(real_time_data['price'])
+
+    # Get market cap from CoinGecko using proper ID
+    coingecko_id = COINGECKO_IDS.get(identifier.lower(), identifier.lower())
+    supply_url = f"https://api.coingecko.com/api/v3/simple/price?ids={coingecko_id}&vs_currencies=usd&include_market_cap=true"
+    supply_response = requests.get(supply_url)
+
 from flask import Flask, request, jsonify, render_template
 import os
 import json
@@ -10,6 +22,21 @@ from datetime import datetime, timedelta
 import random
 import character_config
 from character_config import get_character_response, get_market_sentiment, process_chat_input
+
+# Add this near the top of your file with other constants
+COINGECKO_IDS = {
+    'btc': 'bitcoin',
+    'eth': 'ethereum',
+    'sol': 'solana',
+    'bnb': 'binancecoin',
+    'xrp': 'ripple',
+    'ada': 'cardano',
+    'doge': 'dogecoin',
+    'dot': 'polkadot',
+    'matic': 'matic-network',
+    'link': 'chainlink',
+    # Add more as needed
+}
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -838,8 +865,9 @@ def ask():
                 ticker_url = "https://api.binance.com/api/v3/ticker/24hr"
                 ticker_response = requests.get(f"{ticker_url}?symbol={symbol}", headers={'Cache-Control': 'no-cache'})
 
-                # Get market cap from CoinGecko
-                supply_url = f"https://api.coingecko.com/api/v3/simple/price?ids={identifier.lower()}&vs_currencies=usd&include_market_cap=true"
+                # Get market cap from CoinGecko using proper ID
+                coingecko_id = COINGECKO_IDS.get(identifier.lower(), identifier.lower())
+                supply_url = f"https://api.coingecko.com/api/v3/simple/price?ids={coingecko_id}&vs_currencies=usd&include_market_cap=true"
                 supply_response = requests.get(supply_url)
 
                 if ticker_response.status_code == 200:
@@ -852,7 +880,8 @@ def ask():
                     market_cap = 0
                     if supply_response.status_code == 200:
                         market_data = supply_response.json()
-                        market_cap = market_data.get(identifier.lower(), {}).get('usd_market_cap', 0)
+                        if coingecko_id in market_data:
+                            market_cap = market_data[coingecko_id].get('usd_market_cap', 0)
 
                     response_parts = [
                         f"Analyzing market data for {identifier.upper()}...\n",
