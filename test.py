@@ -1,15 +1,3 @@
-
-
-# Then update the CoinGecko API call in your route:
-if price_response.status_code == 200:
-    real_time_data = price_response.json()
-    current_price = float(real_time_data['price'])
-
-    # Get market cap from CoinGecko using proper ID
-    coingecko_id = COINGECKO_IDS.get(identifier.lower(), identifier.lower())
-    supply_url = f"https://api.coingecko.com/api/v3/simple/price?ids={coingecko_id}&vs_currencies=usd&include_market_cap=true"
-    supply_response = requests.get(supply_url)
-
 from flask import Flask, request, jsonify, render_template
 import os
 import json
