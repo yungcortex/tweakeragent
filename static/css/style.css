@@ -40,6 +40,8 @@ body::before {
     display: flex;
     flex-direction: column;
     box-sizing: border-box;
+    position: relative;
+    overflow: hidden;
 }
 
 /* Messages area with dynamic height */
@@ -52,6 +54,8 @@ body::before {
     border-radius: 5px;
     background-color: rgba(0, 0, 0, 0.3);
     height: calc(100% - 80px);
+    position: relative;
+    max-height: calc(100vh - 160px);
 }
 
 /* Individual message styling */
@@ -81,6 +85,9 @@ body::before {
     border-radius: 5px;
     width: 100%;
     box-sizing: border-box;
+    position: relative;
+    bottom: 0;
+    max-width: 100%;
 }
 
 input[type="text"] {
@@ -117,30 +124,23 @@ button:hover {
         margin: 0;
         padding: 10px;
         height: 100vh;
+        max-height: 100vh;
     }
 
     .messages {
-        padding: 10px;
+        max-height: calc(100vh - 140px);
     }
 
-    .message {
-        padding: 8px;
+    .input-container {
+        width: 100%;
+        max-width: none;
     }
 }
 
-@media (max-width: 480px) {
-    .input-container {
-        flex-direction: column;
-        gap: 8px;
-    }
-
-    button {
-        width: 100%;
-    }
-
-    input[type="text"] {
-        width: 100%;
-        box-sizing: border-box;
+@media (min-width: 1201px) {
+    .chat-container {
+        max-width: 1200px;
+        margin: 10px auto;
     }
 }
 
