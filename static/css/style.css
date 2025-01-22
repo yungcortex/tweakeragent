@@ -8,10 +8,9 @@
 /* Base styles */
 html, body {
     height: 100%;
-    min-width: 375px; /* Minimum width that prevents overlap */
-    overflow-x: auto; /* Allow horizontal scroll if needed */
-    margin: 0;
-    padding: 0;
+    width: 100%;
+    min-width: 500px; /* Hard minimum width */
+    overflow-x: auto;
 }
 
 body {
@@ -37,12 +36,11 @@ body::before {
 
 /* Main container */
 .chat-container {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    min-width: 375px;
+    position: absolute;
+    width: 100%;
+    min-width: 500px; /* Match body min-width */
+    height: 100%;
+    min-height: 600px; /* Hard minimum height */
     display: flex;
     flex-direction: column;
     padding: 20px;
@@ -51,7 +49,7 @@ body::before {
 /* Messages area */
 .messages {
     flex: 1;
-    min-height: 200px;
+    min-height: 400px; /* Hard minimum height */
     border: 1px solid #00ff00;
     border-radius: 5px;
     background-color: rgba(0, 0, 0, 0.3);
@@ -60,9 +58,10 @@ body::before {
     margin-bottom: 20px;
 }
 
-/* Input container */
+/* Input area */
 .input-container {
-    min-height: 80px;
+    height: 100px; /* Fixed height */
+    min-height: 100px;
     border: 1px solid #00ff00;
     border-radius: 5px;
     background-color: rgba(0, 0, 0, 0.3);
