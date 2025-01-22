@@ -766,6 +766,19 @@ def home():
     return render_template("index.html")
 
 
+def format_market_cap(value):
+    """Format market cap to K, M, B, T format"""
+    if value >= 1_000_000_000_000:  # Trillions
+        return f"${value / 1_000_000_000_000:.2f}T"
+    elif value >= 1_000_000_000:     # Billions
+        return f"${value / 1_000_000_000:.2f}B"
+    elif value >= 1_000_000:         # Millions
+        return f"${value / 1_000_000:.2f}M"
+    elif value >= 1_000:             # Thousands
+        return f"${value / 1_000:.2f}K"
+    else:
+        return f"${value:.2f}"
+
 @app.route('/ask', methods=['POST'])
 def ask():
     try:
@@ -795,13 +808,13 @@ def ask():
 
                     response_parts = [
                         f"Analyzing market data for {pair['baseToken']['symbol']}...\n",
-                        f"Market Cap: ${market_cap:,.2f}\n",
+                        f"Market Cap: {format_market_cap(market_cap)}\n",
                         f"Current Price: ${price:.8f}\n",
                         f"24h Change: {change_24h:.2f}% ({sentiment})\n",
-                        f"24h Volume: ${volume_24h:,.2f}\n",
-                        f"Liquidity: ${liquidity:,.2f}\n",
+                        f"24h Volume: {format_market_cap(volume_24h)}\n",
+                        f"Liquidity: {format_market_cap(liquidity)}\n",
                         "\nMarket Analysis:\n",
-                        f"• Trading volume indicates ${volume_24h:,.2f} in 24h\n",
+                        f"• Trading volume indicates {format_market_cap(volume_24h)} in 24h\n",
                         f"• Market sentiment trending {sentiment}\n",
                         "\nMarket Outlook:\n",
                         f"• {pair['baseToken']['symbol']} showing {sentiment} price action with {'strong' if abs(change_24h) > 5 else 'moderate'} momentum"
@@ -843,12 +856,12 @@ def ask():
 
                     response_parts = [
                         f"Analyzing market data for {identifier.upper()}...\n",
-                        f"Market Cap: ${market_cap:,.2f}\n" if market_cap > 0 else "",
+                        f"Market Cap: {format_market_cap(market_cap)}\n" if market_cap > 0 else "",
                         f"Current Price: ${current_price:.8f}\n",
                         f"24h Change: {change:.2f}% ({sentiment})\n",
-                        f"24h Volume: ${volume:,.2f}\n",
+                        f"24h Volume: {format_market_cap(volume)}\n",
                         "\nMarket Analysis:\n",
-                        f"• Trading volume indicates ${volume:,.2f} USDT in 24h\n",
+                        f"• Trading volume indicates {format_market_cap(volume)} USDT in 24h\n",
                         f"• Market sentiment trending {sentiment}\n",
                         "\nMarket Outlook:\n",
                         f"• {identifier.upper()} showing {sentiment} price action with {'strong' if abs(change) > 5 else 'moderate'} momentum"
