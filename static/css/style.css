@@ -6,13 +6,16 @@
 }
 
 /* Base styles */
+html, body {
+    height: 100%;
+    overflow: hidden;
+}
+
 body {
     background-color: #0a0a0a;
     color: #00ff00;
     font-family: 'Courier New', monospace;
-    margin: 0;
-    height: 100vh;
-    overflow: hidden;
+    position: relative;
 }
 
 /* Terminal background */
@@ -30,12 +33,14 @@ body::before {
 
 /* Main container */
 .chat-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
     display: flex;
     flex-direction: column;
-    height: 100vh;
-    padding: 20px 20px 0 20px;
-    max-width: 1200px;
-    margin: 0 auto;
+    padding: 20px;
 }
 
 /* Messages area */
@@ -47,18 +52,18 @@ body::before {
     padding: 20px;
     overflow-y: auto;
     margin-bottom: 20px;
-    min-height: 0;
 }
 
 /* Input area */
 .input-container {
+    position: sticky;
+    bottom: 0;
     border: 1px solid #00ff00;
-    border-radius: 5px 5px 0 0;
+    border-radius: 5px;
     background-color: rgba(0, 0, 0, 0.3);
     padding: 20px;
     display: flex;
     gap: 10px;
-    margin-bottom: 0;
 }
 
 /* Input field */
@@ -81,6 +86,7 @@ button {
     padding: 10px 20px;
     cursor: pointer;
     font-family: inherit;
+    white-space: nowrap;
 }
 
 button:hover {
@@ -117,12 +123,8 @@ button:hover {
 
 /* Mobile adjustments */
 @media (max-width: 768px) {
-    body {
-        padding: 10px;
-    }
-
     .chat-container {
-        height: calc(100vh - 20px);
+        padding: 10px;
     }
 
     .input-container {
@@ -132,6 +134,11 @@ button:hover {
     button {
         width: 100%;
     }
+}
+
+/* Ensure proper stacking */
+.messages, .input-container {
+    z-index: 1;
 }
 
 /* Terminal cursor effect */
