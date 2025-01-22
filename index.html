@@ -1,279 +1,34 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Neural Core</title>
-    <style>
-        :root {
-            --neon-green: #00ff00;
-            --dark-green: #002200;
-            --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
-        }
-
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-
-        html {
-            height: 100%;
-            width: 100%;
-            overflow: hidden;
-        }
-
-        body {
-            margin: 0;
-            padding: 0;
-            background-color: #000;
-            color: var(--neon-green);
-            font-family: 'Courier New', monospace;
-            line-height: 1.4;
-            height: 100%;
-            width: 100%;
-            overflow: hidden;
-            position: fixed;
-            -webkit-text-size-adjust: 100%;
-        }
-
-        .container {
-            display: flex;
-            flex-direction: column;
-            height: 100%;
-            width: 100%;
-            padding: 10px 10px calc(10px + var(--safe-area-inset-bottom)) 10px;
-            gap: 8px;
-            overflow: hidden;
-        }
-
-        .header {
-            flex-shrink: 0;
-            padding-top: env(safe-area-inset-top, 0px);
-        }
-
-        .header pre {
-            display: inline-block;
-            font-size: 12px;
-            line-height: 1;
-            margin: 0;
-            white-space: pre;
-            animation: pulse 2s infinite;
-            color: var(--neon-green);
-            text-shadow: 0 0 5px var(--neon-green);
-        }
-
-        .commands {
-            flex-shrink: 0;
-            font-size: 12px;
-            padding: 8px;
-            border: 1px solid var(--neon-green);
-            border-radius: 5px;
-            background-color: rgba(0, 255, 0, 0.05);
-            white-space: pre-wrap;
-            word-break: break-word;
-        }
-
-        .coin-buttons {
-            flex-shrink: 0;
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
-            gap: 5px;
-            margin-bottom: 5px;
-        }
-
-        .coin-button {
-            background-color: transparent;
-            color: var(--neon-green);
-            border: 1px solid var(--neon-green);
-            padding: 8px 5px;
-            font-size: 12px;
-            border-radius: 5px;
-            white-space: nowrap;
-            text-shadow: 0 0 5px var(--neon-green);
-            transition: all 0.3s ease;
-        }
-
-        .coin-button:active {
-            background-color: var(--neon-green);
-            color: #000;
-        }
-
-        .chat-container {
-            flex: 1;
-            overflow-y: auto;
-            min-height: 0;
-            border: 1px solid var(--neon-green);
-            padding: 10px;
-            background-color: rgba(0, 20, 0, 0.3);
-            border-radius: 5px;
-            margin-bottom: 5px;
-            -webkit-overflow-scrolling: touch;
-        }
-
-        .input-container {
-            flex-shrink: 0;
-            display: flex;
-            gap: 10px;
-            padding: 5px;
-            background-color: #000;
-            margin-bottom: env(safe-area-inset-bottom, 0px);
-            position: relative;
-            z-index: 1000;
-        }
-
-        #userInput {
-            flex: 1;
-            background-color: #000;
-            border: 1px solid var(--neon-green);
-            color: var(--neon-green);
-            padding: 10px;
-            font-family: 'Courier New', monospace;
-            border-radius: 5px;
-            font-size: 16px;
-            min-height: 40px;
-        }
-
-        button {
-            background-color: transparent;
-            color: var(--neon-green);
-            border: 1px solid var(--neon-green);
-            padding: 8px 15px;
-            cursor: pointer;
-            font-family: 'Courier New', monospace;
-            border-radius: 5px;
-            text-shadow: 0 0 5px var(--neon-green);
-            min-height: 40px;
-        }
-
-        button:active {
-            background-color: var(--neon-green);
-            color: #000;
-        }
-
-        .message {
-            margin-bottom: 10px;
-            word-wrap: break-word;
-            font-size: 14px;
-        }
-
-        .user-message {
-            color: #fff;
-        }
-
-        .agent-message {
-            color: var(--neon-green);
-        }
-
-        @keyframes pulse {
-            0% { opacity: 0.8; }
-            50% { opacity: 1; }
-            100% { opacity: 0.8; }
-        }
-
-        /* iPhone specific adjustments */
-        @supports (-webkit-touch-callout: none) {
-            .container {
-                height: -webkit-fill-available;
-            }
-
-            .input-container {
-                padding-bottom: max(5px, env(safe-area-inset-bottom, 5px));
-            }
-
-            .chat-container {
-                margin-bottom: 0;
-            }
-        }
-
-        /* iPhone SE and smaller devices */
-        @media (max-width: 375px) {
-            .container {
-                padding: 5px 5px calc(5px + var(--safe-area-inset-bottom)) 5px;
-            }
-
-            .header pre {
-                font-size: 9px;
-                transform: scale(0.8);
-            }
-
-            .commands {
-                font-size: 10px;
-                padding: 6px;
-            }
-
-            .coin-button {
-                font-size: 10px;
-                padding: 5px 2px;
-            }
-
-            #userInput, button {
-                min-height: 36px;
-            }
-        }
-
-        /* Prevent Safari zoom on input */
-        @media screen and (-webkit-min-device-pixel-ratio: 0) {
-            select,
-            textarea,
-            input {
-                font-size: 16px !important;
-            }
-        }
-
-        @media (max-width: 430px) {
-            .chat-container {
-                font-size: 16px;  /* Bigger text */
-                margin-bottom: 60px;  /* More space for input */
-                height: calc(100vh - 280px);  /* Adjust height to move up */
-            }
-
-            .message {
-                font-size: 16px;
-                margin-bottom: 15px;
-            }
-
-            .input-container {
-                position: fixed;
-                bottom: env(safe-area-inset-bottom, 20px);
-                left: 0;
-                right: 0;
-                padding: 15px;
-                background-color: black;
-                z-index: 1000;
-            }
-
-            #userInput {
-                font-size: 16px;
-                padding: 12px;
-                height: 45px;
-            }
-
-            button {
-                font-size: 16px;
-                padding: 12px 20px;
-                height: 45px;
-            }
-
-            .commands {
-                font-size: 14px;  /* Bigger command text */
-            }
-
-            .coin-button {
-                font-size: 14px;  /* Bigger button text */
-                padding: 10px 5px;
-            }
-        }
-
-        /* iPhone SE and smaller devices */
-        @media (max-width: 375px) {
-            .chat-container {
-                height: calc(100vh - 260px);  /* Slightly smaller for tiny screens */
-            }
-        }
-    </style>
+    <title>TweakerAgent</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body>
-    <!-- Rest of the HTML remains the same -->
+    <div class="chat-container">
+        <div class="title-bar">
+            <div class="title-buttons">
+                <span class="minimize">_</span>
+                <span class="maximize">□</span>
+                <span class="close">×</span>
+            </div>
+            TweakerAgent - Neural Core v2.1
+        </div>
+        <div class="messages" id="messages">
+            <div class="message agent-message">
+                Agent: initializing cynicism protocols... try /analyze <coin> or /help
+            </div>
+        </div>
+        <div class="input-container">
+            <input type="text"
+                   id="userInput"
+                   placeholder="Type /analyze btc or /help..."
+                   autocomplete="off"
+                   onkeypress="handleKeyPress(event)">
+            <button onclick="sendMessage()">Send</button>
+        </div>
+    </div>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html>
