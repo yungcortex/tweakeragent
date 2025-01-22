@@ -37,7 +37,7 @@ body::before {
     top: 0;
     left: 0;
     right: 0;
-    bottom: 0;
+    bottom: 20px;
     display: flex;
     flex-direction: column;
     padding: 20px;
@@ -59,13 +59,14 @@ body::before {
 /* Input area */
 .input-container {
     position: relative;
-    min-height: 80px;
+    height: 80px;
     border: 1px solid #00ff00;
     border-radius: 5px;
     background-color: rgba(0, 0, 0, 0.3);
     padding: 20px;
     display: flex;
     gap: 10px;
+    margin-bottom: 0;
 }
 
 /* Input field */
