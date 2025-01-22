@@ -1,68 +1,68 @@
-const chatLog = document.getElementById('chat-log');
-const userInput = document.getElementById('user-input');
-
-userInput.addEventListener('keypress', function(e) {
-    if (e.key === 'Enter') {
-        sendMessage();
-    }
-});
-
-function analyzeToken(token) {
-    userInput.value = `/analyze ${token}`;
-    sendMessage();
-}
-
-function random(min, max) {
-    return Math.floor(Math.random() * (max - min + 1)) + min;
-}
-
-function showTypingIndicator() {
-    const typingDiv = document.createElement('div');
-    typingDiv.className = 'typing';
-    typingDiv.textContent = 'Agent is analyzing';
-    chatLog.appendChild(typingDiv);
-    chatLog.scrollTop = chatLog.scrollHeight;
-    return typingDiv;
-}
-
-async function sendMessage() {
+// Handle message sending
+function sendMessage() {
+    const userInput = document.getElementById('userInput');
     const message = userInput.value.trim();
-    if (!message) return;
 
-    addMessage('You', message, 'user');
-    userInput.value = '';
+    if (message) {
+        // Add user message to chat
+        addMessage(message, true);
 
-    const typingIndicator = showTypingIndicator();
+        // Clear input field
+        userInput.value = '';
 
-    try {
-        await new Promise(resolve => setTimeout(resolve, random(500, 1500)));
-        
-        const response = await fetch('/ask', {
+        // Send message to server
+        fetch('/chat', {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
+                'Content-Type': 'application/json'
             },
             body: JSON.stringify({ message: message })
+        })
+        .then(response => response.json())
+        .then(data => {
+            // Add AI response to chat
+            addMessage(data.response, false);
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            addMessage('Sorry, I encountered an error processing your message.', false);
         });
-        const data = await response.json();
-        
-        typingIndicator.remove();
-        addMessage('Agent', data.response, 'agent');
-    } catch (error) {
-        typingIndicator.remove();
-        addMessage('Agent', 'error processing your request... fitting.', 'agent');
     }
 }
 
-function addMessage(sender, message, className) {
+// Add message to chat window
+function addMessage(message, isUser) {
+    const messagesDiv = document.getElementById('messages');
     const messageDiv = document.createElement('div');
-    messageDiv.className = `message ${className}`;
-    messageDiv.textContent = `${sender}: ${message}`;
-    chatLog.appendChild(messageDiv);
-    chatLog.scrollTop = chatLog.scrollHeight;
+    messageDiv.className = `message ${isUser ? 'user-message' : 'agent-message'}`;
+
+    // Add typing effect for agent messages
+    if (!isUser) {
+        typeMessage(messageDiv, message);
+    } else {
+        messageDiv.textContent = message;
+    }
+
+    messagesDiv.appendChild(messageDiv);
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
 }
 
-// Initialize with welcome message
+// Typing effect for agent messages
+function typeMessage(element, message, index = 0) {
+    if (index < message.length) {
+        element.textContent += message.charAt(index);
+        setTimeout(() => typeMessage(element, message, index + 1), 20);
+    }
+}
+
+// Handle Enter key press
+function handleKeyPress(event) {
+    if (event.key === 'Enter') {
+        sendMessage();
+    }
+}
+
+// Auto-focus input field on page load
 window.onload = function() {
-    addMessage('Agent', 'initializing cynicism protocols... try /analyze <coin> or /help', 'agent');
+    document.getElementById('userInput').focus();
 };
