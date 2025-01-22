@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 # Initialize Flask app
 app = Flask(__name__)
 
-# Add route for main page
+# Add route for main pagev
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -861,7 +861,7 @@ def ask():
                 if ticker_response.status_code == 200:
                     ticker_data = ticker_response.json()
                     change = float(ticker_data['priceChangePercent'])
-                    volume = float(ticker_data['volume'])
+                    volume = float(ticker_data['volume']) * float(current_price)  # Convert to USD
                     sentiment = 'bullish' if change > 0 else 'bearish'
 
                     # Try to get market cap
@@ -870,6 +870,21 @@ def ask():
                         market_data = supply_response.json()
                         if coingecko_id in market_data:
                             market_cap = market_data[coingecko_id].get('usd_market_cap', 0)
+                            logger.info(f"Raw market cap from CoinGecko: {market_cap}")  # Add logging
+
+                    # If CoinGecko fails, calculate approximate market cap using Binance data
+                    if market_cap == 0:
+                        # Fallback to calculating from circulating supply
+                        supply_url = f"https://api.binance.com/api/v3/ticker/24hr?symbol={symbol}"
+                        supply_response = requests.get(supply_url)
+                        if supply_response.status_code == 200:
+                            supply_data = supply_response.json()
+                            if 'lastPrice' in supply_data:
+                                last_price = float(supply_data['lastPrice'])
+                                # Approximate circulating supply for SOL
+                                if identifier.lower() == 'sol':
+                                    circulating_supply = 410500000  # Approximate SOL circulating supply
+                                    market_cap = last_price * circulating_supply
 
                     response_parts = [
                         f"Analyzing market data for {identifier.upper()}...\n",
