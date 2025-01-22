@@ -789,11 +789,13 @@ def ask():
                     change_24h = float(pair.get('priceChange', {}).get('h24', 0))
                     volume_24h = float(pair.get('volume', {}).get('h24', 0))
                     liquidity = float(pair.get('liquidity', {}).get('usd', 0))
+                    market_cap = float(pair.get('fdv', 0))  # Fully Diluted Valuation
 
                     sentiment = 'bullish' if change_24h > 0 else 'bearish'
 
                     response_parts = [
                         f"Analyzing market data for {pair['baseToken']['symbol']}...\n",
+                        f"Market Cap: ${market_cap:,.2f}\n",
                         f"Current Price: ${price:.8f}\n",
                         f"24h Change: {change_24h:.2f}% ({sentiment})\n",
                         f"24h Volume: ${volume_24h:,.2f}\n",
@@ -823,14 +825,25 @@ def ask():
                 ticker_url = "https://api.binance.com/api/v3/ticker/24hr"
                 ticker_response = requests.get(f"{ticker_url}?symbol={symbol}", headers={'Cache-Control': 'no-cache'})
 
+                # Get market cap from CoinGecko
+                supply_url = f"https://api.coingecko.com/api/v3/simple/price?ids={identifier.lower()}&vs_currencies=usd&include_market_cap=true"
+                supply_response = requests.get(supply_url)
+
                 if ticker_response.status_code == 200:
                     ticker_data = ticker_response.json()
                     change = float(ticker_data['priceChangePercent'])
                     volume = float(ticker_data['volume'])
                     sentiment = 'bullish' if change > 0 else 'bearish'
 
+                    # Try to get market cap
+                    market_cap = 0
+                    if supply_response.status_code == 200:
+                        market_data = supply_response.json()
+                        market_cap = market_data.get(identifier.lower(), {}).get('usd_market_cap', 0)
+
                     response_parts = [
                         f"Analyzing market data for {identifier.upper()}...\n",
+                        f"Market Cap: ${market_cap:,.2f}\n" if market_cap > 0 else "",
                         f"Current Price: ${current_price:.8f}\n",
                         f"24h Change: {change:.2f}% ({sentiment})\n",
                         f"24h Volume: ${volume:,.2f}\n",
