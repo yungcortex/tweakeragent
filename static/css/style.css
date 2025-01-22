@@ -6,16 +6,15 @@
 }
 
 /* Base styles */
-html {
+html, body {
     height: 100%;
+    overflow: hidden;
 }
 
 body {
     background-color: #0a0a0a;
     color: #00ff00;
     font-family: 'Courier New', monospace;
-    height: 100%;
-    overflow: hidden;
 }
 
 /* Terminal background */
@@ -31,33 +30,58 @@ body::before {
     z-index: -1;
 }
 
-/* Main container */
+/* Main container with minimum size */
 .chat-container {
-    height: 100vh;
-    display: grid;
-    grid-template-rows: 1fr auto;
-    gap: 20px;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
     padding: 20px;
+    min-width: 350px;   /* Minimum width */
+    min-height: 500px;  /* Minimum height */
 }
 
 /* Messages area */
 .messages {
+    flex: 1;
     border: 1px solid #00ff00;
     border-radius: 5px;
     background-color: rgba(0, 0, 0, 0.3);
     padding: 20px;
     overflow-y: auto;
+    margin-bottom: 20px;
+    min-height: 300px;  /* Minimum height for messages */
 }
 
-/* Input area */
+/* Input area with fixed size */
 .input-container {
+    height: 80px;      /* Fixed height */
+    min-height: 80px;  /* Minimum height */
     border: 1px solid #00ff00;
     border-radius: 5px;
     background-color: rgba(0, 0, 0, 0.3);
     padding: 20px;
     display: flex;
     gap: 10px;
-    align-items: center;
+    transform-origin: bottom;  /* Scale from bottom */
+}
+
+/* When window gets smaller than minimum size */
+@media (max-width: 350px), (max-height: 500px) {
+    .chat-container {
+        transform: scale(0.9);  /* Scale down the entire container */
+    }
+
+    .messages {
+        font-size: 14px;  /* Reduce font size */
+    }
+
+    .input-container {
+        padding: 10px;
+    }
 }
 
 /* Input and button styles */
