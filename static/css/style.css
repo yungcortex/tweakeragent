@@ -11,8 +11,7 @@ body {
     color: #00ff00;
     font-family: 'Courier New', monospace;
     margin: 0;
-    padding: 20px;
-    min-height: 100vh;
+    height: 100vh;
     overflow: hidden;
 }
 
@@ -33,10 +32,10 @@ body::before {
 .chat-container {
     display: flex;
     flex-direction: column;
-    height: calc(100vh - 40px);
+    height: 100vh;
+    padding: 20px 20px 0 20px;
     max-width: 1200px;
     margin: 0 auto;
-    gap: 20px;
 }
 
 /* Messages area */
@@ -47,16 +46,19 @@ body::before {
     background-color: rgba(0, 0, 0, 0.3);
     padding: 20px;
     overflow-y: auto;
+    margin-bottom: 20px;
+    min-height: 0;
 }
 
 /* Input area */
 .input-container {
     border: 1px solid #00ff00;
-    border-radius: 5px;
+    border-radius: 5px 5px 0 0;
     background-color: rgba(0, 0, 0, 0.3);
     padding: 20px;
     display: flex;
     gap: 10px;
+    margin-bottom: 0;
 }
 
 /* Input field */
