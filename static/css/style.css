@@ -5,198 +5,195 @@
     box-sizing: border-box;
 }
 
-/* Base styles */
-html, body {
-    height: 100%;
-    width: 100%;
-}
-
+/* Base styles with retro feel */
 body {
-    background-color: #0a0a0a;
+    background: linear-gradient(45deg, #000033, #330066);
     color: #00ff00;
-    font-family: 'Courier New', monospace;
+    font-family: "MS Sans Serif", "Pixelated MS Sans Serif", "Monaco", monospace;
+    height: 100vh;
     overflow: hidden;
 }
 
-/* Terminal background */
-body::before {
-    content: "";
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: linear-gradient(rgba(0, 255, 0, 0.02), rgba(0, 255, 0, 0.02));
-    pointer-events: none;
-    z-index: -1;
-}
-
-/* Main container */
+/* Chat window container - like old IM windows */
 .chat-container {
     position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 90%;
+    max-width: 800px;
+    height: 85vh;
+    background: rgba(0, 0, 0, 0.85);
+    border: 2px solid #00ffff;
+    border-radius: 8px;
+    box-shadow: 0 0 20px rgba(0, 255, 255, 0.3),
+                inset 0 0 15px rgba(0, 255, 255, 0.2);
+}
+
+/* Title bar - like old Windows */
+.chat-container::before {
+    content: "ELIZA.exe - Neural Chat";
+    position: absolute;
     top: 0;
     left: 0;
-    width: 100%;
-    height: 100%;
-    padding: 20px;
-    min-height: 450px; /* Set minimum height to prevent overlap at this specific point */
+    right: 0;
+    height: 25px;
+    background: linear-gradient(90deg, #000066, #330066);
+    color: #00ffff;
+    padding: 2px 10px;
+    font-size: 14px;
+    border-bottom: 2px solid #00ffff;
+    border-radius: 6px 6px 0 0;
 }
 
-/* Messages area */
+/* Messages area with scanline effect */
 .messages {
     height: calc(100% - 120px);
-    min-height: 300px; /* Minimum height for messages */
-    border: 1px solid #00ff00;
-    border-radius: 5px;
-    background-color: rgba(0, 0, 0, 0.3);
-    padding: 20px;
+    margin: 35px 10px 10px 10px;
+    padding: 15px;
     overflow-y: auto;
-    margin-bottom: 20px;
+    background: rgba(0, 0, 0, 0.7);
+    border: 1px solid #00ffff;
+    border-radius: 4px;
+    position: relative;
 }
 
-/* Input area */
+/* Scanline effect */
+.messages::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(
+        transparent 50%,
+        rgba(0, 255, 255, 0.02) 50%
+    );
+    background-size: 100% 4px;
+    pointer-events: none;
+}
+
+/* Message styling */
+.message {
+    margin-bottom: 15px;
+    padding: 8px 12px;
+    border-radius: 4px;
+    max-width: 85%;
+}
+
+.user-message {
+    margin-left: auto;
+    background: rgba(0, 153, 153, 0.2);
+    border: 1px solid #00cccc;
+    color: #ffffff;
+}
+
+.agent-message {
+    margin-right: auto;
+    background: rgba(51, 0, 102, 0.2);
+    border: 1px solid #9933ff;
+    color: #00ffcc;
+}
+
+/* Input area styled like old IM clients */
 .input-container {
-    position: fixed;
-    left: 20px;
-    right: 20px;
-    bottom: 20px;
-    min-height: 80px; /* Minimum height for input container */
+    position: absolute;
+    bottom: 10px;
+    left: 10px;
+    right: 10px;
     height: 80px;
-    border: 1px solid #00ff00;
-    border-radius: 5px;
-    background-color: rgba(0, 0, 0, 0.3);
-    padding: 20px;
+    background: rgba(0, 0, 51, 0.8);
+    border: 1px solid #00ffff;
+    border-radius: 4px;
+    padding: 10px;
     display: flex;
     gap: 10px;
-    z-index: 10;
 }
 
-/* Input field */
+/* Input field with retro styling */
 input[type="text"] {
     flex: 1;
-    background-color: #000000;
-    border: 1px solid #00ff00;
+    background: rgba(0, 0, 0, 0.8);
+    border: 1px solid #00cccc;
     border-radius: 3px;
-    color: #00ff00;
-    padding: 10px;
-    font-family: inherit;
+    color: #00ffff;
+    padding: 8px 12px;
+    font-family: "MS Sans Serif", "Monaco", monospace;
+    font-size: 14px;
 }
 
-/* Button */
+input[type="text"]:focus {
+    outline: none;
+    border-color: #00ffff;
+    box-shadow: 0 0 10px rgba(0, 255, 255, 0.3);
+}
+
+/* Send button with gradient */
 button {
-    background-color: #003300;
-    border: 1px solid #00ff00;
+    background: linear-gradient(180deg, #000066, #330066);
+    border: 1px solid #00ffff;
     border-radius: 3px;
-    color: #00ff00;
-    padding: 10px 20px;
+    color: #00ffff;
+    padding: 8px 20px;
     cursor: pointer;
     font-family: inherit;
-    white-space: nowrap;
+    text-transform: uppercase;
+    font-size: 12px;
+    letter-spacing: 1px;
+    transition: all 0.3s ease;
 }
 
 button:hover {
-    background-color: #004400;
+    background: linear-gradient(180deg, #330066, #660099);
+    box-shadow: 0 0 15px rgba(0, 255, 255, 0.4);
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+    width: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: rgba(0, 0, 51, 0.5);
+}
+
+::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, #000066, #330066);
+    border: 1px solid #00ffff;
+    border-radius: 5px;
 }
 
 /* Mobile adjustments */
 @media (max-width: 768px) {
     .chat-container {
-        padding: 10px;
+        width: 95%;
+        height: 90vh;
     }
 
     .input-container {
-        left: 10px;
-        right: 10px;
-        bottom: 10px;
         height: auto;
         flex-direction: column;
-        gap: 10px;
-        padding: 10px;
+        gap: 8px;
     }
 
     button {
         width: 100%;
     }
+}
 
-    .messages {
-        height: calc(100% - 140px);
+/* Animation for messages appearing */
+@keyframes messageAppear {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
     }
 }
 
-/* Messages */
 .message {
-    margin-bottom: 10px;
-    word-wrap: break-word;
-}
-
-.user-message {
-    color: #ffffff;
-}
-
-.agent-message {
-    color: #00ff00;
-}
-
-/* Scrollbar */
-::-webkit-scrollbar {
-    width: 8px;
-}
-
-::-webkit-scrollbar-track {
-    background: #000000;
-}
-
-::-webkit-scrollbar-thumb {
-    background: #003300;
-    border-radius: 4px;
-}
-
-/* Terminal cursor effect */
-.cursor {
-    display: inline-block;
-    width: 8px;
-    height: 15px;
-    background: #00ff00;
-    margin-left: 5px;
-    animation: blink 1s infinite;
-}
-
-@keyframes blink {
-    0% { opacity: 0; }
-    50% { opacity: 1; }
-    100% { opacity: 0; }
-}
-
-/* Response formatting */
-pre {
-    white-space: pre-wrap;
-    word-wrap: break-word;
-    margin: 0;
-    font-family: 'Courier New', monospace;
-    max-width: 100%;
-    overflow-x: auto;
-}
-
-/* Focus styles */
-input:focus {
-    outline: none;
-    border-color: #00ff00;
-    box-shadow: 0 0 5px rgba(0, 255, 0, 0.5);
-}
-
-/* Placeholder text */
-::placeholder {
-    color: #004400;
-}
-
-/* Add a specific breakpoint for this window size */
-@media screen and (max-height: 450px) {
-    body {
-        min-height: 450px;
-        overflow-y: auto; /* Allow scrolling when window is too small */
-    }
-
-    .chat-container {
-        position: absolute; /* Change to absolute to allow scrolling */
-    }
+    animation: messageAppear 0.3s ease-out forwards;
 }
