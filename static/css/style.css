@@ -5,16 +5,17 @@
     padding: 0;
 }
 
+html, body {
+    height: 100%;
+    overflow: hidden;
+}
+
 body {
     background-color: #0a0a0a;
-    position: relative;
-    min-height: 100vh;
-    margin: 0;
     font-family: 'Courier New', monospace;
     color: #00ff00;
     display: flex;
     flex-direction: column;
-    overflow: hidden;
 }
 
 /* Terminal effect */
@@ -23,8 +24,8 @@ body::before {
     position: fixed;
     top: 0;
     left: 0;
-    width: 100%;
-    height: 100%;
+    width: 100vw;
+    height: 100vh;
     background:
         linear-gradient(rgba(0, 255, 0, 0.02), rgba(0, 255, 0, 0.02)),
         repeating-linear-gradient(
@@ -43,11 +44,7 @@ body::before {
     display: flex;
     flex-direction: column;
     height: 100vh;
-    width: 100%;
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 1rem;
-    gap: 1rem;
+    padding: 2vh 2vw;
 }
 
 /* Messages area */
@@ -57,16 +54,15 @@ body::before {
     border: 1px solid #00ff00;
     border-radius: 5px;
     background-color: rgba(0, 0, 0, 0.3);
-    padding: 1rem;
-    margin-bottom: 1rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
+    padding: 2vh 2vw;
+    margin-bottom: 2vh;
+    min-height: 0; /* Important for flex container */
 }
 
 /* Message styling */
 .message {
-    padding: 0.5rem;
+    padding: 1vh 1vw;
+    margin-bottom: 1vh;
     border-radius: 3px;
     word-wrap: break-word;
     max-width: 100%;
@@ -83,17 +79,17 @@ body::before {
 /* Input area */
 .input-container {
     display: flex;
-    gap: 1rem;
-    padding: 1rem;
+    gap: 1vw;
+    padding: 2vh 2vw;
     background-color: rgba(0, 0, 0, 0.3);
     border: 1px solid #00ff00;
     border-radius: 5px;
-    min-height: 60px;
+    min-height: fit-content;
 }
 
 input[type="text"] {
     flex: 1;
-    padding: 0.5rem;
+    padding: 1vh 1vw;
     background-color: #000000;
     border: 1px solid #00ff00;
     border-radius: 3px;
@@ -103,7 +99,7 @@ input[type="text"] {
 }
 
 button {
-    padding: 0.5rem 1rem;
+    padding: 1vh 2vw;
     background-color: #003300;
     border: 1px solid #00ff00;
     border-radius: 3px;
@@ -118,31 +114,38 @@ button:hover {
     background-color: #004400;
 }
 
-/* Responsive design */
+/* Responsive design using viewport units */
 @media (max-width: 768px) {
     .chat-container {
-        padding: 0.5rem;
+        padding: 1vh 1vw;
     }
 
     .input-container {
-        padding: 0.5rem;
-        gap: 0.5rem;
+        padding: 1vh 1vw;
+        gap: 2vw;
+    }
+
+    .messages {
+        padding: 1vh 1vw;
     }
 }
 
 @media (max-width: 480px) {
     .input-container {
         flex-direction: column;
+        gap: 1vh;
     }
 
     button {
         width: 100%;
+        padding: 1.5vh 1vw;
     }
 }
 
 /* Scrollbar styling */
 ::-webkit-scrollbar {
-    width: 8px;
+    width: 0.5vw;
+    min-width: 8px;
 }
 
 ::-webkit-scrollbar-track {
