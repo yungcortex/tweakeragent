@@ -14,7 +14,7 @@ body {
     overflow: hidden;
 }
 
-/* Chat window container - like old IM windows */
+/* Chat window container */
 .chat-container {
     position: fixed;
     top: 50%;
@@ -30,9 +30,8 @@ body {
                 inset 0 0 15px rgba(0, 255, 255, 0.2);
 }
 
-/* Title bar - like old Windows */
-.chat-container::before {
-    content: "ELIZA.exe - Neural Chat";
+/* Title bar */
+.title-bar {
     position: absolute;
     top: 0;
     left: 0;
@@ -44,9 +43,28 @@ body {
     font-size: 14px;
     border-bottom: 2px solid #00ffff;
     border-radius: 6px 6px 0 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
 }
 
-/* Messages area with scanline effect */
+/* Title bar buttons */
+.title-buttons {
+    display: flex;
+    gap: 10px;
+}
+
+.title-buttons span {
+    color: #00ffff;
+    cursor: pointer;
+    padding: 0 5px;
+}
+
+.title-buttons span:hover {
+    background: rgba(0, 255, 255, 0.2);
+}
+
+/* Messages area */
 .messages {
     height: calc(100% - 120px);
     margin: 35px 10px 10px 10px;
