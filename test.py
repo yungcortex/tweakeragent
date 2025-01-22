@@ -30,11 +30,14 @@ COINGECKO_IDS = {
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Update the Flask initialization with correct paths
+# Get the absolute path to the parent directory
+parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# Initialize Flask with absolute paths
 app = Flask(__name__,
            static_url_path='/static',
-           static_folder='../static',      # Go up one directory to find static folder
-           template_folder='../templates')  # Go up one directory to find templates folder
+           static_folder=os.path.join(parent_dir, 'static'),
+           template_folder=os.path.join(parent_dir, 'templates'))
 
 # Add route for main pagev
 @app.route('/')
