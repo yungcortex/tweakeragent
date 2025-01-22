@@ -33,7 +33,7 @@ body::before {
 
 /* Main container */
 .chat-container {
-    position: absolute;
+    position: fixed;
     top: 0;
     left: 0;
     right: 0;
@@ -41,11 +41,13 @@ body::before {
     display: flex;
     flex-direction: column;
     padding: 20px;
+    min-height: 400px;
 }
 
 /* Messages area */
 .messages {
     flex: 1;
+    min-height: 200px;
     border: 1px solid #00ff00;
     border-radius: 5px;
     background-color: rgba(0, 0, 0, 0.3);
@@ -56,8 +58,8 @@ body::before {
 
 /* Input area */
 .input-container {
-    position: sticky;
-    bottom: 0;
+    position: relative;
+    min-height: 80px;
     border: 1px solid #00ff00;
     border-radius: 5px;
     background-color: rgba(0, 0, 0, 0.3);
@@ -69,6 +71,7 @@ body::before {
 /* Input field */
 input[type="text"] {
     flex: 1;
+    min-height: 40px;
     background-color: #000000;
     border: 1px solid #00ff00;
     border-radius: 3px;
@@ -79,6 +82,7 @@ input[type="text"] {
 
 /* Button */
 button {
+    min-height: 40px;
     background-color: #003300;
     border: 1px solid #00ff00;
     border-radius: 3px;
@@ -129,10 +133,18 @@ button:hover {
 
     .input-container {
         flex-direction: column;
+        min-height: 100px;
     }
 
     button {
         width: 100%;
+    }
+}
+
+/* Minimum width for the entire container */
+@media (min-width: 300px) {
+    .chat-container {
+        min-width: 300px;
     }
 }
 
