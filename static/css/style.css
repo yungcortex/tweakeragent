@@ -9,16 +9,13 @@
 html, body {
     height: 100%;
     width: 100%;
-    min-width: 500px; /* Hard minimum width */
-    overflow-x: auto;
 }
 
 body {
     background-color: #0a0a0a;
     color: #00ff00;
     font-family: 'Courier New', monospace;
-    position: relative;
-    line-height: 1.5;
+    overflow: hidden;
 }
 
 /* Terminal background */
@@ -36,57 +33,41 @@ body::before {
 
 /* Main container */
 .chat-container {
-    position: absolute;
+    position: fixed;
+    top: 0;
+    left: 0;
     width: 100%;
-    min-width: 500px; /* Match body min-width */
     height: 100%;
-    min-height: 600px; /* Hard minimum height */
-    display: flex;
-    flex-direction: column;
     padding: 20px;
 }
 
 /* Messages area */
 .messages {
-    flex: 1;
-    min-height: 400px; /* Hard minimum height */
+    height: calc(100% - 120px); /* Leave space for input */
     border: 1px solid #00ff00;
     border-radius: 5px;
     background-color: rgba(0, 0, 0, 0.3);
     padding: 20px;
     overflow-y: auto;
-    margin-bottom: 20px;
 }
 
 /* Input area */
 .input-container {
-    height: 100px; /* Fixed height */
-    min-height: 100px;
+    position: fixed;
+    left: 20px;
+    right: 20px;
+    bottom: 20px;
+    height: 80px;
     border: 1px solid #00ff00;
     border-radius: 5px;
     background-color: rgba(0, 0, 0, 0.3);
     padding: 20px;
     display: flex;
     gap: 10px;
+    z-index: 10;
 }
 
-/* Mobile breakpoints */
-@media screen and (max-width: 480px) {
-    .chat-container {
-        padding: 10px;
-    }
-
-    .input-container {
-        flex-direction: column;
-        gap: 10px;
-    }
-
-    button {
-        width: 100%;
-    }
-}
-
-/* Input and button styles */
+/* Input field */
 input[type="text"] {
     flex: 1;
     background-color: #000000;
@@ -97,6 +78,7 @@ input[type="text"] {
     font-family: inherit;
 }
 
+/* Button */
 button {
     background-color: #003300;
     border: 1px solid #00ff00;
@@ -106,6 +88,35 @@ button {
     cursor: pointer;
     font-family: inherit;
     white-space: nowrap;
+}
+
+button:hover {
+    background-color: #004400;
+}
+
+/* Mobile adjustments */
+@media (max-width: 768px) {
+    .chat-container {
+        padding: 10px;
+    }
+
+    .input-container {
+        left: 10px;
+        right: 10px;
+        bottom: 10px;
+        height: auto;
+        flex-direction: column;
+        gap: 10px;
+        padding: 10px;
+    }
+
+    button {
+        width: 100%;
+    }
+
+    .messages {
+        height: calc(100% - 140px);
+    }
 }
 
 /* Messages */
