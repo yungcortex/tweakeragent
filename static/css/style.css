@@ -6,6 +6,8 @@ body {
     margin: 0;
     font-family: 'Courier New', monospace;
     color: #00ff00;
+    padding: 0;
+    box-sizing: border-box;
 }
 
 body::before {
@@ -28,33 +30,37 @@ body::before {
     z-index: -1;
 }
 
-/* Chat container */
+/* Chat container with responsive sizing */
 .chat-container {
-    max-width: 800px;
-    margin: 20px auto;
-    padding: 20px;
-    height: calc(100vh - 140px);
+    width: 95%;
+    max-width: 1200px;
+    margin: 10px auto;
+    padding: 15px;
+    height: calc(100vh - 40px);
     display: flex;
     flex-direction: column;
+    box-sizing: border-box;
 }
 
-/* Messages area */
+/* Messages area with dynamic height */
 .messages {
     flex-grow: 1;
     overflow-y: auto;
-    margin-bottom: 20px;
-    padding: 10px;
+    margin-bottom: 15px;
+    padding: 15px;
     border: 1px solid #00ff00;
     border-radius: 5px;
     background-color: rgba(0, 0, 0, 0.3);
+    height: calc(100% - 80px);
 }
 
 /* Individual message styling */
 .message {
-    margin: 10px 0;
+    margin: 8px 0;
     padding: 10px;
     border-radius: 3px;
     word-wrap: break-word;
+    max-width: 100%;
 }
 
 .user-message {
@@ -65,7 +71,7 @@ body::before {
     color: #00ff00;
 }
 
-/* Input area */
+/* Input area with responsive layout */
 .input-container {
     display: flex;
     gap: 10px;
@@ -73,6 +79,8 @@ body::before {
     background-color: rgba(0, 0, 0, 0.3);
     border: 1px solid #00ff00;
     border-radius: 5px;
+    width: 100%;
+    box-sizing: border-box;
 }
 
 input[type="text"] {
@@ -83,6 +91,7 @@ input[type="text"] {
     border-radius: 3px;
     color: #00ff00;
     font-family: 'Courier New', monospace;
+    min-width: 0; /* Prevents input from overflowing */
 }
 
 button {
@@ -94,10 +103,45 @@ button {
     cursor: pointer;
     font-family: 'Courier New', monospace;
     transition: background-color 0.3s;
+    white-space: nowrap;
 }
 
 button:hover {
     background-color: #004400;
+}
+
+/* Responsive design breakpoints */
+@media (max-width: 768px) {
+    .chat-container {
+        width: 100%;
+        margin: 0;
+        padding: 10px;
+        height: 100vh;
+    }
+
+    .messages {
+        padding: 10px;
+    }
+
+    .message {
+        padding: 8px;
+    }
+}
+
+@media (max-width: 480px) {
+    .input-container {
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    button {
+        width: 100%;
+    }
+
+    input[type="text"] {
+        width: 100%;
+        box-sizing: border-box;
+    }
 }
 
 /* Scrollbar styling */
@@ -140,6 +184,8 @@ pre {
     word-wrap: break-word;
     margin: 0;
     font-family: 'Courier New', monospace;
+    max-width: 100%;
+    overflow-x: auto;
 }
 
 /* Placeholder text color */
@@ -152,20 +198,4 @@ input:focus {
     outline: none;
     border-color: #00ff00;
     box-shadow: 0 0 5px rgba(0, 255, 0, 0.5);
-}
-
-/* Mobile responsiveness */
-@media (max-width: 600px) {
-    .chat-container {
-        margin: 10px;
-        height: calc(100vh - 100px);
-    }
-
-    .input-container {
-        flex-direction: column;
-    }
-
-    button {
-        width: 100%;
-    }
 }
