@@ -8,13 +8,18 @@
 /* Base styles */
 html, body {
     height: 100%;
-    overflow: hidden;
+    min-width: 375px; /* Minimum width that prevents overlap */
+    overflow-x: auto; /* Allow horizontal scroll if needed */
+    margin: 0;
+    padding: 0;
 }
 
 body {
     background-color: #0a0a0a;
     color: #00ff00;
     font-family: 'Courier New', monospace;
+    position: relative;
+    line-height: 1.5;
 }
 
 /* Terminal background */
@@ -30,57 +35,55 @@ body::before {
     z-index: -1;
 }
 
-/* Main container with minimum size */
+/* Main container */
 .chat-container {
     position: fixed;
     top: 0;
     left: 0;
     right: 0;
     bottom: 0;
+    min-width: 375px;
     display: flex;
     flex-direction: column;
     padding: 20px;
-    min-width: 350px;   /* Minimum width */
-    min-height: 500px;  /* Minimum height */
 }
 
 /* Messages area */
 .messages {
     flex: 1;
+    min-height: 200px;
     border: 1px solid #00ff00;
     border-radius: 5px;
     background-color: rgba(0, 0, 0, 0.3);
     padding: 20px;
     overflow-y: auto;
     margin-bottom: 20px;
-    min-height: 300px;  /* Minimum height for messages */
 }
 
-/* Input area with fixed size */
+/* Input container */
 .input-container {
-    height: 80px;      /* Fixed height */
-    min-height: 80px;  /* Minimum height */
+    min-height: 80px;
     border: 1px solid #00ff00;
     border-radius: 5px;
     background-color: rgba(0, 0, 0, 0.3);
     padding: 20px;
     display: flex;
     gap: 10px;
-    transform-origin: bottom;  /* Scale from bottom */
 }
 
-/* When window gets smaller than minimum size */
-@media (max-width: 350px), (max-height: 500px) {
+/* Mobile breakpoints */
+@media screen and (max-width: 480px) {
     .chat-container {
-        transform: scale(0.9);  /* Scale down the entire container */
-    }
-
-    .messages {
-        font-size: 14px;  /* Reduce font size */
+        padding: 10px;
     }
 
     .input-container {
-        padding: 10px;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    button {
+        width: 100%;
     }
 }
 
@@ -104,23 +107,6 @@ button {
     cursor: pointer;
     font-family: inherit;
     white-space: nowrap;
-}
-
-/* Mobile styles */
-@media (max-width: 768px) {
-    .chat-container {
-        padding: 10px;
-        gap: 10px;
-    }
-
-    .input-container {
-        flex-direction: column;
-        padding: 10px;
-    }
-
-    button {
-        width: 100%;
-    }
 }
 
 /* Messages */
@@ -149,44 +135,6 @@ button {
 ::-webkit-scrollbar-thumb {
     background: #003300;
     border-radius: 4px;
-}
-
-/* New breakpoints */
-@media screen and (max-height: 500px) {
-    .chat-container {
-        min-height: 300px;
-    }
-
-    .messages {
-        min-height: 150px;
-    }
-
-    .input-container {
-        min-height: 60px;
-    }
-}
-
-@media screen and (max-width: 480px) {
-    .chat-container {
-        padding: 10px;
-    }
-
-    .input-container {
-        flex-direction: column;
-        min-height: 100px;
-        padding: 10px;
-    }
-
-    button {
-        width: 100%;
-    }
-}
-
-/* Add minimum width constraint */
-@media screen and (min-width: 320px) {
-    .chat-container {
-        min-width: 320px;
-    }
 }
 
 /* Terminal cursor effect */
