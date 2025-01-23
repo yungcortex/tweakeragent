@@ -7,164 +7,104 @@
 
 /* Base styles with retro feel */
 body {
-    background: linear-gradient(45deg, #000033, #330066);
+    font-family: 'Courier New', monospace;
+    background: #2b2b2b;
+    margin: 0;
+    padding: 20px;
     color: #00ff00;
-    font-family: "MS Sans Serif", "Pixelated MS Sans Serif", "Monaco", monospace;
-    height: 100vh;
-    overflow: hidden;
 }
 
 /* Chat window container */
 .chat-container {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 90%;
     max-width: 800px;
-    height: 85vh;
-    background: rgba(0, 0, 0, 0.85);
-    border: 2px solid #00ffff;
-    border-radius: 8px;
-    box-shadow: 0 0 20px rgba(0, 255, 255, 0.3),
-                inset 0 0 15px rgba(0, 255, 255, 0.2);
+    margin: 0 auto;
+    background: #1a1a1a;
+    border: 2px solid #00ff00;
+    border-radius: 10px;
+    box-shadow: 0 0 20px rgba(0, 255, 0, 0.2);
 }
 
-/* Title bar */
-.title-bar {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 25px;
-    background: linear-gradient(90deg, #000066, #330066);
-    color: #00ffff;
-    padding: 2px 10px;
-    font-size: 14px;
-    border-bottom: 2px solid #00ffff;
-    border-radius: 6px 6px 0 0;
+.chat-header {
+    background: #000;
+    padding: 15px;
+    border-bottom: 2px solid #00ff00;
+    border-radius: 8px 8px 0 0;
     display: flex;
-    align-items: center;
     justify-content: space-between;
+    align-items: center;
 }
 
-/* Title bar buttons */
-.title-buttons {
-    display: flex;
-    gap: 10px;
+.chat-header h1 {
+    margin: 0;
+    color: #00ff00;
+    font-size: 1.5em;
 }
 
-.title-buttons span {
-    color: #00ffff;
-    cursor: pointer;
-    padding: 0 5px;
-}
-
-.title-buttons span:hover {
-    background: rgba(0, 255, 255, 0.2);
+.status-indicator {
+    color: #00ff00;
+    font-size: 0.9em;
 }
 
 /* Messages area */
 .messages {
-    height: calc(100% - 120px);
-    margin: 35px 10px 10px 10px;
-    padding: 15px;
+    height: 500px;
     overflow-y: auto;
-    background: rgba(0, 0, 0, 0.7);
-    border: 1px solid #00ffff;
-    border-radius: 4px;
-    position: relative;
-}
-
-/* Scanline effect */
-.messages::after {
-    content: "";
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: linear-gradient(
-        transparent 50%,
-        rgba(0, 255, 255, 0.02) 50%
-    );
-    background-size: 100% 4px;
-    pointer-events: none;
+    padding: 20px;
+    background: #1a1a1a;
 }
 
 /* Message styling */
 .message {
-    margin-bottom: 15px;
-    padding: 8px 12px;
-    border-radius: 4px;
-    max-width: 85%;
+    margin: 10px 0;
+    padding: 10px;
+    border-radius: 5px;
+    max-width: 80%;
 }
 
 .user-message {
+    background: #2b2b2b;
     margin-left: auto;
-    background: rgba(0, 153, 153, 0.2);
-    border: 1px solid #00cccc;
-    color: #ffffff;
+    color: #fff;
 }
 
 .agent-message {
+    background: #000;
     margin-right: auto;
-    background: rgba(51, 0, 102, 0.2);
-    border: 1px solid #9933ff;
-    color: #00ffcc;
+    color: #00ff00;
 }
 
 /* Input area styled like old IM clients */
 .input-container {
-    position: absolute;
-    bottom: 10px;
-    left: 10px;
-    right: 10px;
-    height: 80px;
-    background: rgba(0, 0, 51, 0.8);
-    border: 1px solid #00ffff;
-    border-radius: 4px;
-    padding: 10px;
+    padding: 20px;
+    border-top: 2px solid #00ff00;
     display: flex;
     gap: 10px;
 }
 
-/* Input field with retro styling */
-input[type="text"] {
+input {
     flex: 1;
-    background: rgba(0, 0, 0, 0.8);
-    border: 1px solid #00cccc;
-    border-radius: 3px;
-    color: #00ffff;
-    padding: 8px 12px;
-    font-family: "MS Sans Serif", "Monaco", monospace;
-    font-size: 14px;
-}
-
-input[type="text"]:focus {
-    outline: none;
-    border-color: #00ffff;
-    box-shadow: 0 0 10px rgba(0, 255, 255, 0.3);
+    padding: 10px;
+    background: #2b2b2b;
+    border: 1px solid #00ff00;
+    border-radius: 5px;
+    color: #fff;
+    font-family: 'Courier New', monospace;
 }
 
 /* Send button with gradient */
 button {
-    background: linear-gradient(180deg, #000066, #330066);
-    border: 1px solid #00ffff;
-    border-radius: 3px;
-    color: #00ffff;
-    padding: 8px 20px;
+    padding: 10px 20px;
+    background: #000;
+    border: 1px solid #00ff00;
+    color: #00ff00;
+    border-radius: 5px;
     cursor: pointer;
-    font-family: inherit;
-    text-transform: uppercase;
-    font-size: 12px;
-    letter-spacing: 1px;
-    transition: all 0.3s ease;
+    font-family: 'Courier New', monospace;
 }
 
 button:hover {
-    background: linear-gradient(180deg, #330066, #660099);
-    box-shadow: 0 0 15px rgba(0, 255, 255, 0.4);
+    background: #00ff00;
+    color: #000;
 }
 
 /* Scrollbar styling */
@@ -173,12 +113,11 @@ button:hover {
 }
 
 ::-webkit-scrollbar-track {
-    background: rgba(0, 0, 51, 0.5);
+    background: #1a1a1a;
 }
 
 ::-webkit-scrollbar-thumb {
-    background: linear-gradient(180deg, #000066, #330066);
-    border: 1px solid #00ffff;
+    background: #00ff00;
     border-radius: 5px;
 }
 
