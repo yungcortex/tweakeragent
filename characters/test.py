@@ -141,75 +141,57 @@ def get_market_sentiment(indicators):
         'rsi_condition': "overbought" if indicators['rsi'] > 70 else "oversold" if indicators['rsi'] < 30 else "neutral"
     }
 
-async def get_jupiter_price(token_address):
-    """Get real-time price from Jupiter API"""
-    try:
-        # Jupiter API endpoints
-        price_url = f"https://price.jup.ag/v4/price?ids={token_address}"
-        
-        async with aiohttp.ClientSession() as session:
-            async with session.get(price_url) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    return data.get('data', {}).get(token_address)
-    except Exception as e:
-        logger.error(f"Jupiter API error: {str(e)}")
-    return None
-
-def get_token_address(token_symbol):
-    """Get token address for known tokens"""
-    token_addresses = {
-        'sol': 'So11111111111111111111111111111111111111112',  # Native SOL
-        'bonk': 'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263',  # BONK
-        'wen': 'WENWENvqqNya429ubCdXG1xHz4XGxdC3SdqmeVNyHLr7',  # WEN
-        'jup': 'JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN',  # JUP
-        'rac': 'RAC3qCKy6CHt6HtMYDhDQvet8NyqRWgbKnTMhVzKfwt',  # RAC
-        'pyth': 'HZ1JovNiVvGrGNiiYvEozEVgZ88xvNbhB9bmHhxQuTc9',  # PYTH
-        # Add more tokens as needed
-    }
-    return token_addresses.get(token_symbol.lower())
-
-async def get_token_data_async(token_id):
+def get_token_data(token_id):
     """Get real-time token data using Jupiter API"""
     try:
+        # Normalize token input
         token_id = token_id.lower().strip()
-        token_address = get_token_address(token_id)
-        
+
+        # Jupiter token mapping
+        token_addresses = {
+            'sol': 'So11111111111111111111111111111111111111112',
+            'bonk': 'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263',
+            'wen': 'WENWENvqqNya429ubCdXG1xHz4XGxdC3SdqmeVNyHLr7',
+            'jup': 'JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN',
+            'rac': 'RAC3qCKy6CHt6HtMYDhDQvet8NyqRWgbKnTMhVzKfwt',
+            'pyth': 'HZ1JovNiVvGrGNiiYvEozEVgZ88xvNbhB9bmHhxQuTc9'
+        }
+
+        token_address = token_addresses.get(token_id)
         if not token_address:
             return None
-            
-        # Get current price and data from Jupiter
-        price_data = await get_jupiter_price(token_address)
-        
-        if price_data:
-            current_price = float(price_data['price'])
-            
-            # Calculate 30s change
-            thirty_sec_ago = time.time() - 30
-            
-            return {
-                'price': current_price,
-                'price_30s': price_data.get('price_30s', current_price),
-                'change_30s': price_data.get('change_30s', 0),
-                'volume_24h': float(price_data.get('volume24h', 0)),
-                'source': 'jupiter',
-                'extra': {
-                    'liquidity': price_data.get('liquidity', 0),
-                    'dex': 'Jupiter',
-                    'last_updated': datetime.now().strftime('%H:%M:%S')
+
+        # Get price from Jupiter
+        url = f"https://price.jup.ag/v4/price?ids={token_address}"
+        logger.info(f"Requesting price from Jupiter for {token_id}: {url}")
+
+        response = requests.get(url)
+        logger.info(f"Jupiter response: {response.text}")
+
+        if response.status_code == 200:
+            data = response.json()
+            price_data = data.get('data', {}).get(token_address)
+
+            if price_data:
+                return {
+                    'price': float(price_data['price']),
+                    'volume_24h': float(price_data.get('volume24h', 0)),
+                    'source': 'jupiter',
+                    'extra': {
+                        'dex': 'Jupiter',
+                        'last_updated': datetime.now().strftime('%H:%M:%S')
+                    }
                 }
-            }
-            
+
     except Exception as e:
         logger.error(f"Error in get_token_data: {str(e)}")
+        logger.exception("Full traceback:")
     return None
 
 def format_analysis(analysis_data):
-    """Format market analysis with 30s real-time data"""
+    """Format market analysis"""
     try:
         price = analysis_data.get('price', 0)
-        price_30s = analysis_data.get('price_30s', price)
-        change_30s = ((price - price_30s) / price_30s) * 100 if price_30s else 0
         volume = analysis_data.get('volume_24h', 0)
         extra = analysis_data.get('extra', {})
 
@@ -221,39 +203,25 @@ def format_analysis(analysis_data):
         else:
             price_str = f"${price:.8f}"
 
-        # Base response with 30s data
-        parts = [
-            f"Price: {price_str}",
-            f"30s Change: {change_30s:+.3f}%"
-        ]
-        
-        # Add volume
+        # Format volume
         if volume >= 1_000_000_000:
             volume_str = f"${volume/1_000_000_000:.2f}B"
         elif volume >= 1_000_000:
             volume_str = f"${volume/1_000_000:.2f}M"
         else:
             volume_str = f"${volume:,.0f}"
-        parts.append(f"Volume: {volume_str}")
 
-        # Add liquidity if available
-        if extra.get('liquidity'):
-            liq = float(extra['liquidity'])
-            if liq >= 1_000_000:
-                liq_str = f"${liq/1_000_000:.2f}M"
-            else:
-                liq_str = f"${liq:,.0f}"
-            parts.append(f"Liquidity: {liq_str}")
-
-        # Add last updated time
-        if extra.get('last_updated'):
-            parts.append(f"Updated: {extra['last_updated']}")
+        parts = [
+            f"Price: {price_str}",
+            f"Volume: {volume_str}",
+            f"Updated: {extra.get('last_updated', 'now')}"
+        ]
 
         return " - ".join(parts)
-        
+
     except Exception as e:
         logger.error(f"Error formatting analysis: {str(e)}")
-        return "error getting price data! try again!"
+        return "error formatting data"
 
 def get_random_response():
     """Get a random non-analysis response"""
@@ -281,37 +249,30 @@ def ask():
         data = request.json
         message = data.get('message', '').strip().lower()
         logger.info(f"Received message: {message}")
-        
-        # Extract token - support various formats
-        token = None
-        
-        # Remove common prefixes and get the token
+
+        # Clean up the message
         message = message.replace('price of ', '').replace('check ', '')
         message = message.replace('how is ', '').replace('what is ', '')
         message = message.replace('$', '').replace('#', '')
-        
-        words = message.split()
-        if words:
-            token = words[0]  # Take first word as token
-            
-            # Create event loop for async call
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            
-            # Get token data
-            analysis_data = loop.run_until_complete(get_token_data_async(token))
-            loop.close()
-            
+
+        # Get first word as token
+        token = message.split()[0] if message else None
+
+        if token:
+            logger.info(f"Looking up token: {token}")
+            analysis_data = get_token_data(token)
+
             if analysis_data:
                 response = format_analysis(analysis_data)
                 return jsonify({"response": response})
             else:
                 return jsonify({"response": "can't find that token! check the symbol or try another one!"})
-        
+
         return jsonify({"response": "what token should i look up? give me a symbol!"})
 
     except Exception as e:
         logger.error(f"Error in ask route: {str(e)}")
+        logger.exception("Full traceback:")
         return jsonify({"response": "system hiccup! give me a moment to recalibrate!"})
 
 if __name__ == '__main__':
