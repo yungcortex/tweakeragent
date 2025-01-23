@@ -1,9 +1,6 @@
 services:
   - type: web
-    name: crypto-analysis-bot
+    name: tweakeragent
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn test:app
-    envVars:
-      - key: PYTHON_VERSION
-        value: 3.11
+    startCommand: gunicorn characters.test:app
