@@ -6,27 +6,20 @@ function sendMessage() {
         addMessage(`You: ${message}`, true);
         userInput.value = '';
 
-        // Check if the message is asking about a crypto price or analysis
-        const cryptoKeywords = ['price', 'analyze', 'check', 'how much', 'how is', 'what is'];
+        // Check if message is about crypto
+        const cryptoKeywords = ['price', 'analyze', 'check', 'how is', 'how much', 'what is'];
         const commonTickers = ['btc', 'eth', 'sol', 'bnb', 'xrp', 'doge', 'ada', 'dot', 'matic', 'link'];
 
-        // Convert message to lowercase for easier matching
         const lowerMessage = message.toLowerCase();
-
-        // Check if message contains a crypto keyword and either a common ticker or looks like a contract address
         const isAskingAboutCrypto = (
             cryptoKeywords.some(keyword => lowerMessage.includes(keyword)) ||
             commonTickers.some(ticker => lowerMessage.includes(ticker)) ||
-            /0x[a-fA-F0-9]{40}/.test(message) // Check for ETH-style addresses
+            /0x[a-fA-F0-9]{40}/.test(message)
         );
 
-        // Extract the potential token identifier
         let token = '';
         if (isAskingAboutCrypto) {
-            // Try to find a common ticker in the message
             token = commonTickers.find(ticker => lowerMessage.includes(ticker)) || '';
-
-            // If no common ticker found, check for contract address
             if (!token) {
                 const addressMatch = message.match(/0x[a-fA-F0-9]{40}/);
                 if (addressMatch) {
@@ -76,14 +69,24 @@ function addMessage(message, isUser) {
     }
 
     messagesDiv.appendChild(messageDiv);
-    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    scrollToBottom();
 }
 
+// Faster typing speed (5ms instead of 15ms)
 function typeMessage(element, message, index = 0) {
     if (index < message.length) {
         element.textContent += message.charAt(index);
-        setTimeout(() => typeMessage(element, message, index + 1), 15);
+        setTimeout(() => {
+            typeMessage(element, message, index + 1);
+            scrollToBottom();  // Scroll while typing
+        }, 5);  // Reduced from 15ms to 5ms for faster typing
     }
+}
+
+// New function to handle scrolling
+function scrollToBottom() {
+    const messagesDiv = document.getElementById('messages');
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
 }
 
 function handleKeyPress(event) {
