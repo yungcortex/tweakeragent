@@ -8,7 +8,6 @@ import random
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
-import ta
 import aiohttp
 import asyncio
 
