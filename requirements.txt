@@ -4,5 +4,6 @@ requests
 numpy
 pandas
 python-dotenv
+talib-binary
 aiohttp
 web3
