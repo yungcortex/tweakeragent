@@ -1,11 +1,3 @@
-/* Reset */
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-}
-
-/* Base styles with retro feel */
 body {
     font-family: 'Courier New', monospace;
     background: #2b2b2b;
@@ -14,7 +6,6 @@ body {
     color: #00ff00;
 }
 
-/* Chat window container */
 .chat-container {
     max-width: 800px;
     margin: 0 auto;
@@ -45,7 +36,6 @@ body {
     font-size: 0.9em;
 }
 
-/* Messages area */
 .messages {
     height: 500px;
     overflow-y: auto;
@@ -53,7 +43,6 @@ body {
     background: #1a1a1a;
 }
 
-/* Message styling */
 .message {
     margin: 10px 0;
     padding: 10px;
@@ -73,7 +62,6 @@ body {
     color: #00ff00;
 }
 
-/* Input area styled like old IM clients */
 .input-container {
     padding: 20px;
     border-top: 2px solid #00ff00;
@@ -91,7 +79,6 @@ input {
     font-family: 'Courier New', monospace;
 }
 
-/* Send button with gradient */
 button {
     padding: 10px 20px;
     background: #000;
@@ -107,7 +94,6 @@ button:hover {
     color: #000;
 }
 
-/* Scrollbar styling */
 ::-webkit-scrollbar {
     width: 10px;
 }
@@ -119,38 +105,4 @@ button:hover {
 ::-webkit-scrollbar-thumb {
     background: #00ff00;
     border-radius: 5px;
-}
-
-/* Mobile adjustments */
-@media (max-width: 768px) {
-    .chat-container {
-        width: 95%;
-        height: 90vh;
-    }
-
-    .input-container {
-        height: auto;
-        flex-direction: column;
-        gap: 8px;
-    }
-
-    button {
-        width: 100%;
-    }
-}
-
-/* Animation for messages appearing */
-@keyframes messageAppear {
-    from {
-        opacity: 0;
-        transform: translateY(10px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-.message {
-    animation: messageAppear 0.3s ease-out forwards;
 }
