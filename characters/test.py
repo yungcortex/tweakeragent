@@ -240,42 +240,33 @@ def ask():
     try:
         data = request.json
         message = data.get('message', '').strip().lower()
+        logger.info(f"Received message: {message}")  # Add logging
 
-        # Check if it's a crypto query
-        if any(keyword in message for keyword in ['price', 'how is', 'check', 'analyze', 'what', '$', '0x']):
-            # Extract token from message
-            tokens = message.split()
-            token_id = None
+        # Check if it's a crypto query - simplify detection
+        if any(word in message for word in ['sol', 'btc', 'eth', 'price', '$', 'check']):
+            # Extract token - simplified logic
+            message = message.replace('price of ', '').replace('check ', '')
+            message = message.replace('$', '').replace('#', '')
 
-            for token in tokens:
-                # Check for contract address
-                if token.startswith('0x'):
-                    token_id = token
-                    break
-                # Check for $ symbol
-                elif token.startswith('$'):
-                    token_id = token[1:]
-                    break
-                # Check for common symbols
-                elif token.upper() in ['BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'DOGE', 'ADA', 'DOT', 'MATIC', 'LINK']:
-                    token_id = token
-                    break
+            # Clean the token
+            token = message.split()[0].upper()  # Take first word and uppercase it
+            logger.info(f"Extracted token: {token}")  # Add logging
 
-            if token_id:
-                analysis_data = get_token_data(token_id)
+            if token in ['SOL', 'BTC', 'ETH', 'BNB', 'XRP', 'DOGE', 'ADA', 'DOT', 'MATIC', 'LINK']:
+                analysis_data = get_token_data(token)
                 if analysis_data:
                     response = format_analysis(analysis_data)
                     return jsonify({"response": response})
                 else:
-                    return jsonify({"response": "token not found in my database! try another one!"})
+                    return jsonify({"response": "having trouble getting that data! try again!"})
 
-            return jsonify({"response": "couldn't find that coin! give me a valid ticker or address!"})
+            return jsonify({"response": "i only know major coins right now! try BTC, ETH, SOL, etc"})
 
         # For non-crypto queries, get a random response
         return jsonify({"response": get_random_response()})
 
     except Exception as e:
-        logger.error(f"Error processing request: {str(e)}")
+        logger.error(f"Error in ask route: {str(e)}")
         return jsonify({"response": "system hiccup! give me a moment to recalibrate!"})
 
 if __name__ == '__main__':
