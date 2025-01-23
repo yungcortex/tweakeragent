@@ -95,22 +95,26 @@ async def get_binance_data(session: aiohttp.ClientSession, symbol: str) -> Optio
 async def get_dexscreener_data(session: aiohttp.ClientSession, token_id: str) -> Optional[Dict[str, Any]]:
     """Get data from DexScreener"""
     try:
-        # Remove any $ prefix if present
-        token_id = token_id.replace('$', '')
+        # Remove any $ prefix and spaces
+        token_id = token_id.replace('$', '').strip()
         
-        # Determine if it's a contract address or symbol
-        endpoint = f"pairs/{token_id}" if token_id.startswith('0x') else f"pairs/search?q={token_id}"
+        # For contract addresses, use the direct pairs endpoint
+        if token_id.startswith('0x'):
+            url = f"{APIS['dexscreener']['url']}/pairs/solana/{token_id}"
+        else:
+            url = f"{APIS['dexscreener']['url']}/pairs/search?q={token_id}"
         
-        url = f"{APIS['dexscreener']['url']}/{endpoint}"
-        logger.info(f"Querying DexScreener: {url}")  # Add logging
+        logger.info(f"Querying DexScreener: {url}")
         
         async with session.get(url) as resp:
             if resp.status == 200:
                 data = await resp.json()
-                logger.info(f"DexScreener response: {data}")  # Add logging
+                logger.info(f"DexScreener response received: {data}")
                 
-                if data.get('pairs') and len(data['pairs']) > 0:
-                    pair = data['pairs'][0]  # Get the first pair
+                # Handle both single pair and search results
+                pairs = data.get('pairs', [])
+                if isinstance(pairs, list) and len(pairs) > 0:
+                    pair = pairs[0]  # Get the first pair
                     return {
                         'price': float(pair.get('priceUsd', 0)),
                         'change_24h': float(pair.get('priceChange', {}).get('h24', 0)),
@@ -124,6 +128,7 @@ async def get_dexscreener_data(session: aiohttp.ClientSession, token_id: str) ->
                     }
     except Exception as e:
         logger.error(f"DexScreener API error for {token_id}: {str(e)}")
+        logger.exception(e)  # This will print the full stack trace
     return None
 
 async def get_coingecko_data(session: aiohttp.ClientSession, token_id: str) -> Optional[Dict[str, Any]]:
@@ -336,40 +341,53 @@ def get_random_response():
     return random.choice(responses)
 
 def extract_token(msg: str) -> Optional[str]:
-    """Enhanced token detection"""
+    """Enhanced token detection with better contract address handling"""
     try:
         msg = msg.lower().strip()
         
-        # Handle direct contract addresses
+        # First check for contract addresses (0x...)
         if '0x' in msg:
-            contract = msg[msg.find('0x'):].split()[0]
+            # Find the start of the contract address
+            start_idx = msg.find('0x')
+            # Extract everything after 0x until a space or end of string
+            contract = msg[start_idx:].split()[0].strip()
+            logger.info(f"Found contract address: {contract}")
             return contract
-            
-        # Handle $ prefixed tokens
+        
+        # Then check for $ prefixed tokens
         if '$' in msg:
-            token = msg[msg.find('$')+1:].split()[0]
+            token = msg[msg.find('$')+1:].split()[0].strip()
+            logger.info(f"Found $ prefixed token: {token}")
             return token
-            
-        # Handle "price of" or "price for" format
+        
+        # Check for specific command formats
         if 'price of' in msg:
-            return msg.split('price of')[1].strip()
+            token = msg.split('price of')[1].strip()
+            logger.info(f"Found 'price of' format: {token}")
+            return token
+        
         if 'price for' in msg:
-            return msg.split('price for')[1].strip()
-            
-        # Handle /analyze command
+            token = msg.split('price for')[1].strip()
+            logger.info(f"Found 'price for' format: {token}")
+            return token
+        
         if '/analyze' in msg:
-            return msg.split('/analyze')[1].strip()
-            
-        # Split message and look for token
+            token = msg.split('/analyze')[1].strip()
+            logger.info(f"Found analyze command: {token}")
+            return token
+        
+        # General word detection
         words = msg.split()
         for word in words:
             word = word.strip('?!.,')
-            if word.isalnum() and not word in ['price', 'of', 'for', 'the']:
+            if word.isalnum() and word not in ['price', 'of', 'for', 'the']:
+                logger.info(f"Found token from general text: {word}")
                 return word
-                
+        
         return None
     except Exception as e:
         logger.error(f"Error in extract_token: {str(e)}")
+        logger.exception(e)  # This will print the full stack trace
         return None
 
 @app.route('/')
@@ -380,10 +398,12 @@ def index():
 def ask():
     try:
         data = request.json
-        message = data.get('message', '').strip().lower()
+        message = data.get('message', '').strip()
+        logger.info(f"Received message: {message}")
         
         # Extract token from message
         token_id = extract_token(message)
+        logger.info(f"Extracted token: {token_id}")
         
         if token_id:
             # Get token data asynchronously
@@ -391,6 +411,8 @@ def ask():
             asyncio.set_event_loop(loop)
             analysis_data = loop.run_until_complete(get_token_data(token_id))
             loop.close()
+            
+            logger.info(f"Analysis data: {analysis_data}")
 
             if analysis_data:
                 response = format_analysis(analysis_data)
@@ -402,6 +424,7 @@ def ask():
 
     except Exception as e:
         logger.error(f"Error processing request: {str(e)}")
+        logger.exception(e)  # This will print the full stack trace
         return jsonify({"response": "having a mental breakdown... try again later... like my trading career..."})
 
 if __name__ == '__main__':
