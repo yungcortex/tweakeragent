@@ -1,6 +1,9 @@
 services:
   - type: web
     name: tweakeragent
-    env: python
+    runtime: python
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn characters.test:app
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
