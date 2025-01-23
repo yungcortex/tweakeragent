@@ -1,3 +1,12 @@
+function addMessage(message, isUser) {
+    const chatContainer = document.getElementById('chatContainer');
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `message ${isUser ? 'user-message' : 'bot-message'}`;
+    messageDiv.textContent = isUser ? `You: ${message}` : message;
+    chatContainer.appendChild(messageDiv);
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+}
+
 function sendMessage() {
     const input = document.getElementById('userInput');
     const message = input.value.trim();
@@ -23,16 +32,7 @@ function sendMessage() {
     }
 }
 
-function addMessage(message, isUser) {
-    const chatContainer = document.getElementById('chatContainer');
-    const messageDiv = document.createElement('div');
-    messageDiv.className = `message ${isUser ? 'user-message' : 'bot-message'}`;
-    messageDiv.textContent = isUser ? `You: ${message}` : message;
-    chatContainer.appendChild(messageDiv);
-    chatContainer.scrollTop = chatContainer.scrollHeight;
-}
-
-// Add focus to input when page loads
+// Focus input on page load
 window.onload = function() {
     document.getElementById('userInput').focus();
 };
