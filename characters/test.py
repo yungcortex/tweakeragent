@@ -146,6 +146,28 @@ async def get_defillama_data(session: aiohttp.ClientSession, token_id: str) -> O
         logger.error(f"DefiLlama API error: {str(e)}")
     return None
 
+async def get_pumpfun_data(session: aiohttp.ClientSession, token_id: str) -> Optional[Dict[str, Any]]:
+    """Get data from Pump.fun API"""
+    try:
+        async with session.get(f"{APIS['pump_fun']['url']}/tokens/{token_id}") as resp:
+            if resp.status == 200:
+                data = await resp.json()
+                if data.get('data'):
+                    token_data = data['data']
+                    return {
+                        'price': float(token_data.get('price', 0)),
+                        'change_24h': float(token_data.get('price_change_24h', 0)),
+                        'volume_24h': float(token_data.get('volume_24h', 0)),
+                        'source': 'pump_fun',
+                        'extra': {
+                            'liquidity': token_data.get('liquidity', 0),
+                            'dex': 'pump.fun'
+                        }
+                    }
+    except Exception as e:
+        logger.error(f"Pump.fun API error: {str(e)}")
+    return None
+
 async def get_token_data(token_id: str) -> Optional[Dict[str, Any]]:
     """Get token data from multiple sources with fallbacks"""
     async with aiohttp.ClientSession() as session:
@@ -154,6 +176,9 @@ async def get_token_data(token_id: str) -> Optional[Dict[str, Any]]:
         # Create tasks for all API calls
         if token_id.upper() in ['BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'DOGE']:
             tasks.append(get_binance_data(session, token_id))
+
+        # Add PumpFun for all queries since it might have newer tokens
+        tasks.append(get_pumpfun_data(session, token_id))
 
         if token_id.startswith('0x'):
             tasks.append(get_dexscreener_data(session, token_id))
@@ -170,10 +195,15 @@ async def get_token_data(token_id: str) -> Optional[Dict[str, Any]]:
         valid_results = [r for r in results if isinstance(r, dict)]
 
         if valid_results:
-            # Combine data from multiple sources if available
+            # Prioritize PumpFun data if available
+            pump_fun_data = next((r for r in valid_results if r['source'] == 'pump_fun'), None)
+            if pump_fun_data:
+                pump_fun_data['sources'] = [r['source'] for r in valid_results]
+                return pump_fun_data
+
+            # Fall back to combined data from other sources
             combined_data = valid_results[0]
             if len(valid_results) > 1:
-                # Average the prices from different sources
                 prices = [r['price'] for r in valid_results if 'price' in r]
                 combined_data['price'] = sum(prices) / len(prices)
                 combined_data['sources'] = [r['source'] for r in valid_results]
