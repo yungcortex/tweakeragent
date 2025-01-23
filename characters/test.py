@@ -95,6 +95,10 @@ def format_analysis(analysis_data):
         logger.error(f"Error formatting analysis: {str(e)}")
         return "error formatting data"
 
+@app.route('/')
+def home():
+    return jsonify({"status": "online", "message": "Tweaker Agent is running!"})
+
 @app.route('/ask', methods=['POST'])
 def ask():
     try:
