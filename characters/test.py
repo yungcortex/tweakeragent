@@ -140,109 +140,93 @@ def get_market_sentiment(indicators):
     }
 
 def get_token_data(token_id):
-    """Get token data from multiple sources"""
+    """Get token data with accurate price and mcap"""
     try:
-        # Try Binance for major coins
+        # Try CoinGecko first for major coins
         if token_id.upper() in ['BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'DOGE', 'ADA', 'DOT', 'MATIC', 'LINK']:
-            symbol = token_id.upper()
-            price_resp = requests.get(f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}USDT")
-            ticker_resp = requests.get(f"https://api.binance.com/api/v3/ticker/24hr?symbol={symbol}USDT")
-
-            if price_resp.status_code == 200 and ticker_resp.status_code == 200:
-                price_data = price_resp.json()
-                ticker_data = ticker_resp.json()
+            cg_url = f"https://api.coingecko.com/api/v3/simple/price?ids={COINGECKO_IDS.get(token_id.lower(), token_id.lower())}&vs_currencies=usd&include_market_cap=true&include_24hr_vol=true&include_24hr_change=true"
+            response = requests.get(cg_url)
+            if response.status_code == 200:
+                data = response.json()
+                coin_data = data[COINGECKO_IDS.get(token_id.lower(), token_id.lower())]
                 return {
-                    'price': float(price_data['price']),
-                    'change_24h': float(ticker_data['priceChangePercent']),
-                    'volume_24h': float(ticker_data['volume']) * float(price_data['price']),
-                    'source': 'binance'
+                    'price': coin_data['usd'],
+                    'market_cap': coin_data['usd_market_cap'],
+                    'change_24h': coin_data['usd_24h_change'],
+                    'volume_24h': coin_data['usd_24h_vol'],
+                    'source': 'coingecko'
                 }
 
         # Try DexScreener for any token
-        try:
-            dex_resp = requests.get(f"https://api.dexscreener.com/latest/dex/search?q={token_id}")
-            if dex_resp.status_code == 200:
-                data = dex_resp.json()
-                if data.get('pairs') and len(data['pairs']) > 0:
-                    pair = data['pairs'][0]  # Get most liquid pair
-                    return {
-                        'price': float(pair['priceUsd']),
-                        'change_24h': float(pair.get('priceChange', {}).get('h24', 0)),
-                        'volume_24h': float(pair.get('volume', {}).get('h24', 0)),
-                        'source': 'dexscreener',
-                        'extra': {
-                            'liquidity': pair.get('liquidity', {}).get('usd', 0),
-                            'dex': pair.get('dexId', 'unknown'),
-                            'name': pair.get('baseToken', {}).get('name', 'unknown')
-                        }
+        dex_resp = requests.get(f"https://api.dexscreener.com/latest/dex/search?q={token_id}")
+        if dex_resp.status_code == 200:
+            data = dex_resp.json()
+            if data.get('pairs') and len(data['pairs']) > 0:
+                pair = data['pairs'][0]  # Get most liquid pair
+                mcap = float(pair['priceUsd']) * float(pair.get('baseToken', {}).get('totalSupply', 0))
+                return {
+                    'price': float(pair['priceUsd']),
+                    'market_cap': mcap,
+                    'change_24h': float(pair.get('priceChange', {}).get('h24', 0)),
+                    'volume_24h': float(pair.get('volume', {}).get('h24', 0)),
+                    'source': 'dexscreener',
+                    'extra': {
+                        'liquidity': pair.get('liquidity', {}).get('usd', 0),
+                        'dex': pair.get('dexId', 'unknown'),
+                        'name': pair.get('baseToken', {}).get('name', 'unknown')
                     }
-        except Exception as e:
-            logger.error(f"DexScreener error: {str(e)}")
-
-        # Try PumpFun API
-        try:
-            pump_resp = requests.get(f"https://api.pump.fun/api/v1/token/search?q={token_id}")
-            if pump_resp.status_code == 200:
-                data = pump_resp.json()
-                if data and len(data) > 0:
-                    token = data[0]
-                    return {
-                        'price': float(token['price']),
-                        'change_24h': float(token.get('price_change_24h', 0)),
-                        'volume_24h': float(token.get('volume_24h', 0)),
-                        'source': 'pump.fun',
-                        'extra': {
-                            'name': token.get('name', 'unknown'),
-                            'symbol': token.get('symbol', 'unknown')
-                        }
-                    }
-        except Exception as e:
-            logger.error(f"PumpFun error: {str(e)}")
+                }
 
     except Exception as e:
         logger.error(f"Error in get_token_data: {str(e)}")
     return None
 
+# Add CoinGecko ID mappings
+COINGECKO_IDS = {
+    'btc': 'bitcoin',
+    'eth': 'ethereum',
+    'sol': 'solana',
+    'bnb': 'binancecoin',
+    'xrp': 'ripple',
+    'doge': 'dogecoin',
+    'ada': 'cardano',
+    'dot': 'polkadot',
+    'matic': 'matic-network',
+    'link': 'chainlink'
+}
+
 def format_analysis(analysis_data):
-    """Format market analysis with token info"""
+    """Format market analysis with accurate price and mcap"""
     try:
         price = analysis_data.get('price', 0)
+        mcap = analysis_data.get('market_cap', 0)
         change = analysis_data.get('change_24h', 0)
         volume = analysis_data.get('volume_24h', 0)
         source = analysis_data.get('source', 'unknown')
         extra = analysis_data.get('extra', {})
 
-        # Get token name if available
-        token_name = extra.get('name', 'this token')
+        # Format market cap to be readable
+        if mcap >= 1_000_000_000:
+            mcap_str = f"${mcap/1_000_000_000:.2f}B"
+        else:
+            mcap_str = f"${mcap/1_000_000:.2f}M"
 
-        # Market action phrases
-        action_phrases = [
-            f"price action at ${price:.8f}",
-            f"volume pumping at ${volume:,.2f}",
-            f"{'pumping' if change > 0 else 'dumping'} {abs(change):.2f}% on the daily"
+        # Base response always includes price and mcap
+        base_info = f"Price: ${price:.8f} - MCap: {mcap_str}"
+
+        # Additional info
+        extra_parts = [
+            f"24h Change: {change:+.2f}%",
+            f"Volume: ${volume:,.0f}"
         ]
 
-        # Add extra info if available
         if extra.get('liquidity'):
-            action_phrases.append(f"liquidity pool at ${extra['liquidity']:,.2f}")
+            extra_parts.append(f"Liquidity: ${extra['liquidity']:,.0f}")
         if extra.get('dex'):
-            action_phrases.append(f"trading on {extra['dex']}")
+            extra_parts.append(f"DEX: {extra['dex']}")
 
-        # Add market prediction
-        if change > 5:
-            action_phrases.append("looking super bullish right now")
-        elif change < -5:
-            action_phrases.append("bears taking control")
-        else:
-            action_phrases.append("consolidating for next move")
-
-        # Randomize order and select 3-4 phrases
-        random.shuffle(action_phrases)
-        selected_phrases = action_phrases[:random.randint(3, 4)]
-
-        # Join with varied connectors
-        connectors = [' ! ', ' - ', ' && ', ' >> ']
-        return random.choice(connectors).join(selected_phrases)
+        # Combine all parts
+        return f"{base_info} ! {' - '.join(extra_parts)}"
 
     except Exception as e:
         logger.error(f"Error formatting analysis: {str(e)}")
