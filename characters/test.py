@@ -64,28 +64,64 @@ def format_analysis(analysis_data):
         change = analysis_data.get('change_24h', 0)
         volume = analysis_data.get('volume_24h', 0)
 
-        # Create unhinged analysis using character vocabulary
-        vocab = CHARACTER['vocabulary']
-
-        if change > 0:
-            trend = vocab.get('uptrend', 'dopamine spike')
-            state = "manic episode"
-        else:
-            trend = vocab.get('downtrend', 'depression spiral')
-            state = "existential crisis"
-
-        response_parts = [
-            f"having another {state}... {abs(change):.2f}% {trend}",
-            f"volume showing {vocab.get('volume', 'emotional damage')} at ${volume:,.2f}",
-            f"price at ${price:.8f} like my deteriorating stability",
-            f"market sentiment more unstable than my relationships"
+        # Get random phrases for variety
+        manic_states = [
+            "manic episode",
+            "psychological breakdown",
+            "existential crisis",
+            "therapy session",
+            "mental relapse"
         ]
+
+        addiction_comparisons = [
+            "caffeine addiction",
+            "doomscrolling habit",
+            "trading addiction",
+            "chart obsession",
+            "hopium dependency"
+        ]
+
+        relationship_metaphors = [
+            "my relationships",
+            "my commitment issues",
+            "my trust issues",
+            "my emotional stability",
+            "my social life"
+        ]
+
+        # Create dynamic response
+        state = random.choice(manic_states)
+        addiction = random.choice(addiction_comparisons)
+        relationship = random.choice(relationship_metaphors)
+
+        # Format with random variations
+        response_parts = [
+            f"having another {state}... {'up' if change > 0 else 'down'} {abs(change):.2f}% like my serotonin levels",
+            f"volume at ${volume:,.2f} - more unstable than my {addiction}",
+            f"price ${price:.8f} giving me flashbacks",
+            f"market sentiment more volatile than {relationship}"
+        ]
+
+        # Randomize the order slightly
+        if random.random() > 0.5:
+            response_parts[0], response_parts[1] = response_parts[1], response_parts[0]
 
         return " ... ".join(response_parts).lower()
 
     except Exception as e:
         logger.error(f"Error formatting analysis: {str(e)}")
         return "having a breakdown... give me a minute..."
+
+def get_random_response():
+    """Get a random non-analysis response"""
+    responses = [
+        "yeah, that's about as stable as my mental state...",
+        "having another existential crisis... ask me about crypto instead...",
+        "i only understand charts and emotional damage...",
+        "my therapist says i should focus on crypto analysis...",
+        "that's beyond my psychological capacity right now..."
+    ]
+    return random.choice(responses)
 
 @app.route('/')
 def index():
@@ -98,7 +134,7 @@ def ask():
         message = data.get('message', '').strip().lower()
 
         # Check if it's a crypto query
-        if any(keyword in message for keyword in ['price', 'how is', 'check', 'analyze']):
+        if any(keyword in message for keyword in ['price', 'how is', 'check', 'analyze', 'what']):
             # Extract token from message
             tokens = message.split()
             for token in tokens:
@@ -108,22 +144,26 @@ def ask():
                     price_url = f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}"
                     ticker_url = f"https://api.binance.com/api/v3/ticker/24hr?symbol={symbol}"
 
-                    price_data = requests.get(price_url).json()
-                    ticker_data = requests.get(ticker_url).json()
+                    try:
+                        price_data = requests.get(price_url).json()
+                        ticker_data = requests.get(ticker_url).json()
 
-                    analysis_data = {
-                        'price': float(price_data['price']),
-                        'change_24h': float(ticker_data['priceChangePercent']),
-                        'volume_24h': float(ticker_data['volume']) * float(price_data['price'])
-                    }
+                        analysis_data = {
+                            'price': float(price_data['price']),
+                            'change_24h': float(ticker_data['priceChangePercent']),
+                            'volume_24h': float(ticker_data['volume']) * float(price_data['price'])
+                        }
 
-                    response = format_analysis(analysis_data)
-                    return jsonify({"response": response})
+                        response = format_analysis(analysis_data)
+                        return jsonify({"response": response})
+                    except Exception as e:
+                        logger.error(f"API error: {str(e)}")
+                        return jsonify({"response": "having a mental breakdown trying to analyze that... try again..."})
 
             return jsonify({"response": "can't find that coin... like my lost hopes and dreams..."})
 
-        # For non-crypto queries, get a character response
-        return jsonify({"response": get_character_response()})
+        # For non-crypto queries, get a random response
+        return jsonify({"response": get_random_response()})
 
     except Exception as e:
         logger.error(f"Error processing request: {str(e)}")
