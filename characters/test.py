@@ -1,144 +1,14 @@
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify
 import os
-import json
-import time
 import requests
 import logging
-import random
-import pandas as pd
-import numpy as np
-from datetime import datetime, timedelta
-import aiohttp
-import asyncio
+from datetime import datetime
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Get the absolute path to the project root directory
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-# Initialize Flask
-app = Flask(__name__,
-           static_url_path='/static',
-           static_folder=os.path.join(project_root, 'static'),
-           template_folder=os.path.join(project_root, 'templates'))
-
-# Load character configuration
-character_path = os.path.join(os.path.dirname(__file__), 'tweaker.character.json')
-with open(character_path, 'r') as f:
-    CHARACTER = json.load(f)
-
-def get_kline_data(symbol, interval='30s', limit=100):
-    """Get recent kline/candlestick data"""
-    try:
-        url = f"https://api.binance.com/api/v3/klines"
-        params = {
-            'symbol': f"{symbol}USDT",
-            'interval': interval,
-            'limit': limit
-        }
-        response = requests.get(url, params=params)
-        if response.status_code == 200:
-            data = response.json()
-            df = pd.DataFrame(data, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume',
-                                           'close_time', 'quote_volume', 'trades', 'taker_buy_base',
-                                           'taker_buy_quote', 'ignored'])
-
-            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-            for col in ['open', 'high', 'low', 'close', 'volume']:
-                df[col] = df[col].astype(float)
-
-            return df
-        return None
-    except Exception as e:
-        logger.error(f"Error fetching kline data: {str(e)}")
-        return None
-
-def calculate_indicators(df):
-    """Calculate technical indicators using ta library"""
-    try:
-        # Calculate RSI
-        df['rsi'] = ta.momentum.RSIIndicator(df['close']).rsi()
-
-        # Calculate MACD
-        macd = ta.trend.MACD(df['close'])
-        df['macd'] = macd.macd()
-        df['macd_signal'] = macd.macd_signal()
-        df['macd_hist'] = macd.macd_diff()
-
-        # Calculate Bollinger Bands
-        bollinger = ta.volatility.BollingerBands(df['close'])
-        df['bb_high'] = bollinger.bollinger_hband()
-        df['bb_mid'] = bollinger.bollinger_mavg()
-        df['bb_low'] = bollinger.bollinger_lband()
-
-        # Calculate momentum
-        df['momentum'] = ta.momentum.ROCIndicator(df['close']).roc()
-
-        # Calculate trend strength (ADX)
-        adx = ta.trend.ADXIndicator(df['high'], df['low'], df['close'])
-        df['adx'] = adx.adx()
-
-        # Get latest values
-        latest = df.iloc[-1]
-        return {
-            'rsi': latest['rsi'],
-            'macd': latest['macd'],
-            'macd_signal': latest['macd_signal'],
-            'macd_hist': latest['macd_hist'],
-            'bb_upper': latest['bb_high'],
-            'bb_middle': latest['bb_mid'],
-            'bb_lower': latest['bb_low'],
-            'momentum': latest['momentum'],
-            'adx': latest['adx'],
-            'close': latest['close'],
-            'prev_close': df.iloc[-2]['close']
-        }
-    except Exception as e:
-        logger.error(f"Error calculating indicators: {str(e)}")
-        return None
-
-def get_market_sentiment(indicators):
-    """Analyze market sentiment based on technical indicators"""
-    sentiment = 0
-
-    # RSI analysis
-    if indicators['rsi'] > 70:
-        sentiment -= 1  # Overbought
-    elif indicators['rsi'] < 30:
-        sentiment += 1  # Oversold
-
-    # MACD analysis
-    if indicators['macd'] > indicators['macd_signal']:
-        sentiment += 1
-    else:
-        sentiment -= 1
-
-    # Bollinger Bands analysis
-    if indicators['close'] > indicators['bb_upper']:
-        sentiment -= 1  # Overbought
-    elif indicators['close'] < indicators['bb_lower']:
-        sentiment += 1  # Oversold
-
-    # Momentum
-    if indicators['momentum'] > 0:
-        sentiment += 1
-    else:
-        sentiment -= 1
-
-    # ADX for trend strength
-    trend_strength = "weak" if indicators['adx'] < 25 else "strong"
-
-    # Price change
-    price_change = ((indicators['close'] - indicators['prev_close']) / indicators['prev_close']) * 100
-
-    return {
-        'sentiment': sentiment,
-        'trend_strength': trend_strength,
-        'price_change': price_change,
-        'rsi_condition': "overbought" if indicators['rsi'] > 70 else "oversold" if indicators['rsi'] < 30 else "neutral"
-    }
+app = Flask(__name__)
 
 def get_token_data(token_id):
     """Get real-time token data using Jupiter API"""
@@ -153,7 +23,10 @@ def get_token_data(token_id):
             'wen': 'WENWENvqqNya429ubCdXG1xHz4XGxdC3SdqmeVNyHLr7',
             'jup': 'JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN',
             'rac': 'RAC3qCKy6CHt6HtMYDhDQvet8NyqRWgbKnTMhVzKfwt',
-            'pyth': 'HZ1JovNiVvGrGNiiYvEozEVgZ88xvNbhB9bmHhxQuTc9'
+            'pyth': 'HZ1JovNiVvGrGNiiYvEozEVgZ88xvNbhB9bmHhxQuTc9',
+            'jito': 'J1toso1uCk3RLmjorhTtrVwY9HJ7X8V9yYac6Y7kGCPn',
+            'msol': 'mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So',
+            'ray': '4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R'
         }
 
         token_address = token_addresses.get(token_id)
@@ -221,26 +94,6 @@ def format_analysis(analysis_data):
     except Exception as e:
         logger.error(f"Error formatting analysis: {str(e)}")
         return "error formatting data"
-
-def get_random_response():
-    """Get a random non-analysis response"""
-    responses = [
-        "ready to analyze any coin you throw at me!",
-        "feed me some tickers! let's see those charts!",
-        "crypto analysis mode activated! what are we checking?",
-        "charts are my specialty! give me a symbol!",
-        "ready to dive into some price action!",
-        "scanning markets! which coin should we analyze?",
-        "neural networks primed for chart analysis!",
-        "show me a ticker and watch the magic happen!",
-        "market scanner online! what's our target?",
-        "ready to crunch those numbers! what are we looking at?"
-    ]
-    return random.choice(responses)
-
-@app.route('/')
-def index():
-    return render_template('index.html')
 
 @app.route('/ask', methods=['POST'])
 def ask():
