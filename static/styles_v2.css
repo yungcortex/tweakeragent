@@ -1,111 +1,127 @@
 body {
-    font-family: 'Courier New', monospace;
-    background: #0a0a0f;
+    background-color: #0f0f0f;
+    color: #00ff00;
+    font-family: monospace;
     margin: 0;
     padding: 20px;
-    color: #00ff9d;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    line-height: 1.6;
 }
 
-.chat-container {
-    max-width: 800px;
-    margin: 0 auto;
-    background: rgba(16, 16, 24, 0.95);
-    border: 2px solid #00ff9d;
-    border-radius: 10px;
-    box-shadow: 0 0 30px rgba(0, 255, 157, 0.2);
-    backdrop-filter: blur(5px);
-}
-
-.chat-header {
-    background: rgba(0, 0, 0, 0.8);
-    padding: 15px;
-    border-bottom: 2px solid #00ff9d;
-    border-radius: 8px 8px 0 0;
+.header {
+    background-color: #0f0f0f;
+    border-bottom: 2px solid #00ff00;
+    padding: 10px;
     display: flex;
     justify-content: space-between;
     align-items: center;
+    margin-bottom: 20px;
 }
 
-.chat-header h1 {
-    margin: 0;
+.logo {
+    display: flex;
+    align-items: center;
+}
+
+.ascii-art {
+    font-family: monospace;
+    white-space: pre;
     color: #00ff00;
-    font-size: 1.5em;
+    font-size: 14px;
 }
 
-.status-indicator {
-    color: #00ff9d;
-    font-size: 0.9em;
-    text-shadow: 0 0 10px #00ff9d;
+.title {
+    font-size: 24px;
+    color: #00ff00;
+    text-transform: uppercase;
+    letter-spacing: 2px;
 }
 
-.messages {
-    height: 500px;
+.status {
+    color: #00ff00;
+    font-size: 14px;
+    padding: 5px 10px;
+    border: 1px solid #00ff00;
+    border-radius: 3px;
+}
+
+.neural-core {
+    text-align: center;
+    color: #00ff00;
+    font-size: 16px;
+    margin: 10px 0;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+}
+
+.chat-container {
+    flex-grow: 1;
     overflow-y: auto;
+    margin: 20px 0;
     padding: 20px;
-    background: rgba(16, 16, 24, 0.7);
+    border: 1px solid #00ff00;
+    border-radius: 5px;
+    background-color: rgba(0, 255, 0, 0.05);
 }
 
 .message {
     margin: 10px 0;
     padding: 10px;
-    border-radius: 5px;
-    max-width: 80%;
-    backdrop-filter: blur(5px);
+    border-radius: 3px;
+    font-size: 14px;
 }
 
 .user-message {
-    background: rgba(0, 255, 157, 0.1);
-    margin-left: auto;
-    color: #fff;
-    border: 1px solid rgba(0, 255, 157, 0.3);
+    color: #00ff00;
+    background-color: rgba(0, 255, 0, 0.1);
+    border-left: 3px solid #00ff00;
 }
 
-.agent-message {
-    background: rgba(0, 0, 0, 0.5);
-    margin-right: auto;
-    color: #00ff9d;
-    border: 1px solid rgba(0, 255, 157, 0.3);
+.bot-message {
+    color: #00ff00;
 }
 
 .input-container {
-    padding: 20px;
-    border-top: 2px solid #00ff9d;
     display: flex;
     gap: 10px;
-    background: rgba(0, 0, 0, 0.8);
-    border-radius: 0 0 8px 8px;
+    padding: 20px;
+    background-color: #0f0f0f;
+    border-top: 2px solid #00ff00;
 }
 
-input {
-    flex: 1;
+input[type="text"] {
+    flex-grow: 1;
+    background-color: #1a1a1a;
+    border: 1px solid #00ff00;
+    color: #00ff00;
     padding: 10px;
-    background: rgba(16, 16, 24, 0.9);
-    border: 1px solid #00ff9d;
-    border-radius: 5px;
-    color: #fff;
-    font-family: 'Courier New', monospace;
+    border-radius: 3px;
+    font-family: monospace;
+    font-size: 14px;
 }
 
-input:focus {
+input[type="text"]:focus {
     outline: none;
-    box-shadow: 0 0 10px rgba(0, 255, 157, 0.3);
+    box-shadow: 0 0 5px #00ff00;
 }
 
 button {
+    background-color: #00ff00;
+    color: #000;
+    border: none;
     padding: 10px 20px;
-    background: rgba(0, 255, 157, 0.1);
-    border: 1px solid #00ff9d;
-    color: #00ff9d;
-    border-radius: 5px;
+    border-radius: 3px;
     cursor: pointer;
-    font-family: 'Courier New', monospace;
+    font-family: monospace;
+    font-size: 14px;
+    text-transform: uppercase;
     transition: all 0.3s ease;
 }
 
 button:hover {
-    background: #00ff9d;
-    color: #000;
-    box-shadow: 0 0 15px rgba(0, 255, 157, 0.5);
+    background-color: #00cc00;
 }
 
 ::-webkit-scrollbar {
@@ -123,16 +139,6 @@ button:hover {
 
 ::-webkit-scrollbar-thumb:hover {
     background: #00cc7a;
-}
-
-.ascii-art {
-    font-family: monospace;
-    color: #00ff9d;
-    text-align: center;
-    white-space: pre;
-    line-height: 1.2;
-    margin-right: 20px;
-    animation: pulse 2s infinite;
 }
 
 .chat-header pre {
