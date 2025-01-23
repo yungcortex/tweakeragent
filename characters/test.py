@@ -140,24 +140,73 @@ def get_market_sentiment(indicators):
     }
 
 def get_token_data(token_id):
-    """Get token data with accurate price and mcap"""
+    """Get real-time token data with accurate prices"""
     try:
-        # Try CoinGecko first for major coins
-        if token_id.upper() in ['BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'DOGE', 'ADA', 'DOT', 'MATIC', 'LINK']:
-            cg_url = f"https://api.coingecko.com/api/v3/simple/price?ids={COINGECKO_IDS.get(token_id.lower(), token_id.lower())}&vs_currencies=usd&include_market_cap=true&include_24hr_vol=true&include_24hr_change=true"
-            response = requests.get(cg_url)
-            if response.status_code == 200:
-                data = response.json()
-                coin_data = data[COINGECKO_IDS.get(token_id.lower(), token_id.lower())]
-                return {
-                    'price': coin_data['usd'],
-                    'market_cap': coin_data['usd_market_cap'],
-                    'change_24h': coin_data['usd_24h_change'],
-                    'volume_24h': coin_data['usd_24h_vol'],
-                    'source': 'coingecko'
+        # Normalize token input
+        token_id = token_id.lower().strip()
+
+        # Handle major coins with Binance API first (most real-time prices)
+        major_coins = {
+            'sol': 'SOLUSDT',
+            'btc': 'BTCUSDT',
+            'eth': 'ETHUSDT',
+            'bnb': 'BNBUSDT',
+            'xrp': 'XRPUSDT',
+            'doge': 'DOGEUSDT',
+            'ada': 'ADAUSDT',
+            'matic': 'MATICUSDT',
+            'link': 'LINKUSDT'
+        }
+
+        if token_id in major_coins:
+            symbol = major_coins[token_id]
+            # Get real-time price from Binance
+            price_url = f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}"
+            ticker_url = f"https://api.binance.com/api/v3/ticker/24hr?symbol={symbol}"
+
+            price_resp = requests.get(price_url)
+            ticker_resp = requests.get(ticker_url)
+
+            if price_resp.status_code == 200 and ticker_resp.status_code == 200:
+                price_data = price_resp.json()
+                ticker_data = ticker_resp.json()
+
+                # Get market cap from CoinGecko for completeness
+                cg_ids = {
+                    'sol': 'solana',
+                    'btc': 'bitcoin',
+                    'eth': 'ethereum',
+                    'bnb': 'binancecoin',
+                    'xrp': 'ripple',
+                    'doge': 'dogecoin',
+                    'ada': 'cardano',
+                    'matic': 'matic-network',
+                    'link': 'chainlink'
                 }
 
-        # Try DexScreener for any token
+                mcap = 0
+                try:
+                    cg_url = f"https://api.coingecko.com/api/v3/simple/price?ids={cg_ids[token_id]}&vs_currencies=usd&include_market_cap=true"
+                    cg_resp = requests.get(cg_url)
+                    if cg_resp.status_code == 200:
+                        cg_data = cg_resp.json()
+                        mcap = cg_data[cg_ids[token_id]]['usd_market_cap']
+                except:
+                    pass
+
+                return {
+                    'price': float(price_data['price']),
+                    'market_cap': mcap,
+                    'change_24h': float(ticker_data['priceChangePercent']),
+                    'volume_24h': float(ticker_data['volume']) * float(price_data['price']),
+                    'source': 'binance',
+                    'extra': {
+                        'high_24h': float(ticker_data['highPrice']),
+                        'low_24h': float(ticker_data['lowPrice'])
+                    }
+                }
+
+        # For other tokens, try DexScreener
         dex_resp = requests.get(f"https://api.dexscreener.com/latest/dex/search?q={token_id}")
         if dex_resp.status_code == 200:
             data = dex_resp.json()
@@ -181,22 +230,8 @@ def get_token_data(token_id):
         logger.error(f"Error in get_token_data: {str(e)}")
     return None
 
-# Add CoinGecko ID mappings
-COINGECKO_IDS = {
-    'btc': 'bitcoin',
-    'eth': 'ethereum',
-    'sol': 'solana',
-    'bnb': 'binancecoin',
-    'xrp': 'ripple',
-    'doge': 'dogecoin',
-    'ada': 'cardano',
-    'dot': 'polkadot',
-    'matic': 'matic-network',
-    'link': 'chainlink'
-}
-
 def format_analysis(analysis_data):
-    """Format market analysis with accurate price and mcap"""
+    """Format market analysis with accurate numbers"""
     try:
         price = analysis_data.get('price', 0)
         mcap = analysis_data.get('market_cap', 0)
@@ -205,14 +240,24 @@ def format_analysis(analysis_data):
         source = analysis_data.get('source', 'unknown')
         extra = analysis_data.get('extra', {})
 
-        # Format market cap to be readable
+        # Format market cap
         if mcap >= 1_000_000_000:
             mcap_str = f"${mcap/1_000_000_000:.2f}B"
-        else:
+        elif mcap >= 1_000_000:
             mcap_str = f"${mcap/1_000_000:.2f}M"
+        else:
+            mcap_str = f"${mcap:,.0f}"
 
-        # Base response always includes price and mcap
-        base_info = f"Price: ${price:.8f} - MCap: {mcap_str}"
+        # Format price based on its magnitude
+        if price < 0.01:
+            price_str = f"${price:.8f}"
+        elif price < 1:
+            price_str = f"${price:.4f}"
+        else:
+            price_str = f"${price:,.2f}"
+
+        # Base response
+        base_info = f"Price: {price_str} - MCap: {mcap_str}"
 
         # Additional info
         extra_parts = [
@@ -224,8 +269,11 @@ def format_analysis(analysis_data):
             extra_parts.append(f"Liquidity: ${extra['liquidity']:,.0f}")
         if extra.get('dex'):
             extra_parts.append(f"DEX: {extra['dex']}")
+        if extra.get('high_24h'):
+            extra_parts.append(f"24h High: ${float(extra['high_24h']):,.2f}")
+        if extra.get('low_24h'):
+            extra_parts.append(f"24h Low: ${float(extra['low_24h']):,.2f}")
 
-        # Combine all parts
         return f"{base_info} ! {' - '.join(extra_parts)}"
 
     except Exception as e:
