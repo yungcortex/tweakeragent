@@ -95,25 +95,35 @@ async def get_binance_data(session: aiohttp.ClientSession, symbol: str) -> Optio
 async def get_dexscreener_data(session: aiohttp.ClientSession, token_id: str) -> Optional[Dict[str, Any]]:
     """Get data from DexScreener"""
     try:
-        # Handle both contract addresses and token symbols
-        search_param = token_id if token_id.startswith('0x') else f"search?q={token_id}"
-        async with session.get(f"{APIS['dexscreener']['url']}/pairs/{search_param}") as resp:
+        # Remove any $ prefix if present
+        token_id = token_id.replace('$', '')
+        
+        # Determine if it's a contract address or symbol
+        endpoint = f"pairs/{token_id}" if token_id.startswith('0x') else f"pairs/search?q={token_id}"
+        
+        url = f"{APIS['dexscreener']['url']}/{endpoint}"
+        logger.info(f"Querying DexScreener: {url}")  # Add logging
+        
+        async with session.get(url) as resp:
             if resp.status == 200:
                 data = await resp.json()
+                logger.info(f"DexScreener response: {data}")  # Add logging
+                
                 if data.get('pairs') and len(data['pairs']) > 0:
-                    pair = data['pairs'][0]
+                    pair = data['pairs'][0]  # Get the first pair
                     return {
-                        'price': float(pair['priceUsd']),
-                        'change_24h': float(pair['priceChange']['h24']),
-                        'volume_24h': float(pair['volume']['h24']),
+                        'price': float(pair.get('priceUsd', 0)),
+                        'change_24h': float(pair.get('priceChange', {}).get('h24', 0)),
+                        'volume_24h': float(pair.get('volume', {}).get('h24', 0)),
                         'source': 'dexscreener',
                         'extra': {
                             'liquidity': pair.get('liquidity', {}).get('usd', 0),
-                            'dex': pair.get('dexId', 'unknown')
+                            'dex': pair.get('dexId', 'unknown'),
+                            'chain': pair.get('chainId', 'unknown')
                         }
                     }
     except Exception as e:
-        logger.error(f"DexScreener API error: {str(e)}")
+        logger.error(f"DexScreener API error for {token_id}: {str(e)}")
     return None
 
 async def get_coingecko_data(session: aiohttp.ClientSession, token_id: str) -> Optional[Dict[str, Any]]:
@@ -155,9 +165,17 @@ async def get_defillama_data(session: aiohttp.ClientSession, token_id: str) -> O
 async def get_pumpfun_data(session: aiohttp.ClientSession, token_id: str) -> Optional[Dict[str, Any]]:
     """Get data from Pump.fun API"""
     try:
-        async with session.get(f"{APIS['pump_fun']['url']}/tokens/{token_id}") as resp:
+        # Remove any $ prefix if present
+        token_id = token_id.replace('$', '')
+        
+        url = f"{APIS['pump_fun']['url']}/tokens/{token_id}"
+        logger.info(f"Querying PumpFun: {url}")  # Add logging
+        
+        async with session.get(url) as resp:
             if resp.status == 200:
                 data = await resp.json()
+                logger.info(f"PumpFun response: {data}")  # Add logging
+                
                 if data.get('data'):
                     token_data = data['data']
                     return {
@@ -171,56 +189,54 @@ async def get_pumpfun_data(session: aiohttp.ClientSession, token_id: str) -> Opt
                         }
                     }
     except Exception as e:
-        logger.error(f"Pump.fun API error: {str(e)}")
+        logger.error(f"Pump.fun API error for {token_id}: {str(e)}")
     return None
 
 async def get_token_data(token_id: str) -> Optional[Dict[str, Any]]:
     """Get token data from multiple sources with fallbacks"""
-    async with aiohttp.ClientSession() as session:
-        tasks = []
+    try:
+        # Clean the token_id
+        token_id = token_id.strip().replace('$', '')
+        logger.info(f"Searching for token: {token_id}")  # Add logging
         
-        # Always try PumpFun and DexScreener first for any token
-        tasks.extend([
-            get_pumpfun_data(session, token_id),
-            get_dexscreener_data(session, token_id)
-        ])
-
-        # For major tokens, also try Binance
-        if token_id.upper() in ['BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'DOGE']:
-            tasks.append(get_binance_data(session, token_id))
-
-        # Try CoinGecko and DefiLlama as fallbacks
-        tasks.extend([
-            get_coingecko_data(session, token_id),
-            get_defillama_data(session, token_id)
-        ])
-
-        # Wait for all API calls to complete
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-
-        # Filter out errors and None results
-        valid_results = [r for r in results if isinstance(r, dict)]
-
-        if valid_results:
-            # Prioritize sources in this order: PumpFun > DexScreener > Others
-            for source in ['pump_fun', 'dexscreener']:
-                source_data = next((r for r in valid_results if r['source'] == source), None)
-                if source_data:
-                    source_data['sources'] = [r['source'] for r in valid_results]
-                    return source_data
-
-            # If no preferred source, use the first available with combined sources
-            combined_data = valid_results[0]
-            combined_data['sources'] = [r['source'] for r in valid_results]
+        async with aiohttp.ClientSession() as session:
+            tasks = []
             
-            # Average the prices if we have multiple sources
-            if len(valid_results) > 1:
-                prices = [r['price'] for r in valid_results if 'price' in r]
-                combined_data['price'] = sum(prices) / len(prices)
+            # Try all sources for every token
+            tasks = [
+                get_pumpfun_data(session, token_id),
+                get_dexscreener_data(session, token_id),
+                get_coingecko_data(session, token_id),
+                get_defillama_data(session, token_id)
+            ]
+            
+            # Add Binance for major tokens
+            if token_id.upper() in ['BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'DOGE']:
+                tasks.append(get_binance_data(session, token_id))
 
-            return combined_data
+            # Wait for all API calls to complete
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            # Filter out errors and None results
+            valid_results = [r for r in results if isinstance(r, dict)]
+            logger.info(f"Valid results found: {len(valid_results)}")  # Add logging
+            
+            if valid_results:
+                # Try to get PumpFun or DexScreener data first
+                for preferred_source in ['pump_fun', 'dexscreener']:
+                    source_data = next((r for r in valid_results if r['source'] == preferred_source), None)
+                    if source_data:
+                        source_data['sources'] = [r['source'] for r in valid_results]
+                        return source_data
 
-        return None
+                # Fallback to any available source
+                result = valid_results[0]
+                result['sources'] = [r['source'] for r in valid_results]
+                return result
+
+    except Exception as e:
+        logger.error(f"Error in get_token_data: {str(e)}")
+    return None
 
 def format_analysis(analysis_data):
     """Format market analysis according to character style"""
@@ -321,43 +337,40 @@ def get_random_response():
 
 def extract_token(msg: str) -> Optional[str]:
     """Enhanced token detection"""
-    msg = msg.lower().strip()
-    words = msg.split()
-    
-    for word in words:
-        # Clean the word
-        word = word.strip('?!.,')
+    try:
+        msg = msg.lower().strip()
         
-        # Contract address
-        if word.startswith('0x'):
-            return word
-        
-        # $ symbol
-        if word.startswith('$'):
-            return word[1:]
-        
-        # Remove common prefixes
-        if word.startswith('price'):
-            continue
-        if word in ['of', 'for', 'the']:
-            continue
+        # Handle direct contract addresses
+        if '0x' in msg:
+            contract = msg[msg.find('0x'):].split()[0]
+            return contract
             
-        # Check for token symbols
-        if word.isalnum():  # Basic check for token symbols
-            return word
+        # Handle $ prefixed tokens
+        if '$' in msg:
+            token = msg[msg.find('$')+1:].split()[0]
+            return token
             
-    # Check for specific patterns
-    if 'price of' in msg:
-        parts = msg.split('price of')
-        if len(parts) > 1:
-            return parts[1].strip()
+        # Handle "price of" or "price for" format
+        if 'price of' in msg:
+            return msg.split('price of')[1].strip()
+        if 'price for' in msg:
+            return msg.split('price for')[1].strip()
             
-    if '/analyze' in msg:
-        parts = msg.split('/analyze')
-        if len(parts) > 1:
-            return parts[1].strip()
+        # Handle /analyze command
+        if '/analyze' in msg:
+            return msg.split('/analyze')[1].strip()
             
-    return None
+        # Split message and look for token
+        words = msg.split()
+        for word in words:
+            word = word.strip('?!.,')
+            if word.isalnum() and not word in ['price', 'of', 'for', 'the']:
+                return word
+                
+        return None
+    except Exception as e:
+        logger.error(f"Error in extract_token: {str(e)}")
+        return None
 
 @app.route('/')
 def index():
