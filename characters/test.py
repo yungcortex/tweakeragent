@@ -319,46 +319,53 @@ def ask():
         data = request.json
         message = data.get('message', '').strip().lower()
 
-        # Enhanced crypto query detection
-        crypto_keywords = ['price', 'how is', 'check', 'analyze', 'what', '$', '0x',
-                         'worth', 'doing', 'chart', 'pump', 'dump', 'moon']
-
-        if any(keyword in message for keyword in crypto_keywords):
-            # Extract token from message (support both symbols and addresses)
-            tokens = message.split()
-            token_id = None
-
-            for token in tokens:
+        # Enhanced token detection
+        def extract_token(msg):
+            # Split message into words
+            words = msg.split()
+            
+            # Look for contract address or token symbol
+            for word in words:
+                # Remove common punctuation
+                word = word.strip('?!.,')
+                
                 # Check for contract address
-                if token.startswith('0x'):
-                    token_id = token
-                    break
+                if word.startswith('0x'):
+                    return word
+                
                 # Check for $ symbol
-                elif token.startswith('$'):
-                    token_id = token[1:]
-                    break
-                # Check for common symbols
-                elif token.upper() in ['BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'DOGE', 'ADA',
-                                     'DOT', 'MATIC', 'LINK', 'AVAX', 'SHIB', 'UNI', 'AAVE']:
-                    token_id = token
-                    break
+                if word.startswith('$'):
+                    return word[1:]  # Remove the $ symbol
+                
+                # Check for /analyze command
+                if word.startswith('/analyze'):
+                    remaining = msg[msg.index('/analyze') + 9:].strip()
+                    return remaining if remaining else None
+                
+                # Check for "price of" format
+                if 'price of' in msg:
+                    remaining = msg[msg.index('price of') + 8:].strip()
+                    return remaining if remaining else None
 
-            if token_id:
-                # Get token data asynchronously
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                analysis_data = loop.run_until_complete(get_token_data(token_id))
-                loop.close()
+            return None
 
-                if analysis_data:
-                    response = format_analysis(analysis_data)
-                    return jsonify({"response": response})
-                else:
-                    return jsonify({"response": "token giving me anxiety... can't find it anywhere... like my will to live..."})
+        # Extract token from message
+        token_id = extract_token(message)
 
-            return jsonify({"response": "can't find that coin... like my lost hopes and dreams..."})
+        if token_id:
+            # Get token data asynchronously
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            analysis_data = loop.run_until_complete(get_token_data(token_id))
+            loop.close()
 
-        # For non-crypto queries, get a random response
+            if analysis_data:
+                response = format_analysis(analysis_data)
+                return jsonify({"response": response})
+            else:
+                return jsonify({"response": "token giving me anxiety... can't find it anywhere... like my will to live..."})
+
+        # For non-token queries, get a random response
         return jsonify({"response": get_random_response()})
 
     except Exception as e:
