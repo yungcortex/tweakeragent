@@ -114,6 +114,7 @@ button:hover {
     white-space: pre;
     line-height: 1.2;
     margin-right: 20px;
+    animation: pulse 2s infinite;
 }
 
 .chat-header pre {
@@ -122,7 +123,80 @@ button:hover {
     color: #00ff00;
 }
 
-/* Add glow effect to ASCII art */
+/* Pulse animation for the ASCII art */
+@keyframes pulse {
+    0% {
+        text-shadow: 0 0 5px #00ff00;
+    }
+    50% {
+        text-shadow: 0 0 20px #00ff00, 0 0 30px #00ff00;
+    }
+    100% {
+        text-shadow: 0 0 5px #00ff00;
+    }
+}
+
+/* Glitch effect for the neural core text */
+.ascii-art pre:last-line {
+    animation: glitch 3s infinite;
+    position: relative;
+}
+
+@keyframes glitch {
+    0% {
+        clip-path: inset(50% 0 30% 0);
+        transform: skew(0.15deg);
+    }
+    20% {
+        clip-path: inset(20% 0 60% 0);
+        transform: skew(-0.15deg);
+    }
+    40% {
+        clip-path: inset(40% 0 40% 0);
+        transform: skew(0.15deg);
+    }
+    60% {
+        clip-path: inset(60% 0 20% 0);
+        transform: skew(0.15deg);
+    }
+    80% {
+        clip-path: inset(30% 0 50% 0);
+        transform: skew(-0.15deg);
+    }
+    100% {
+        clip-path: inset(50% 0 30% 0);
+        transform: skew(0.15deg);
+    }
+}
+
+/* Scanner animation for the box */
 .ascii-art pre {
-    text-shadow: 0 0 5px #00ff00;
+    position: relative;
+    overflow: hidden;
+}
+
+.ascii-art pre::after {
+    content: "";
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: linear-gradient(
+        to bottom,
+        transparent,
+        transparent 50%,
+        rgba(0, 255, 0, 0.1) 50%,
+        transparent 51%
+    );
+    animation: scan 4s linear infinite;
+}
+
+@keyframes scan {
+    0% {
+        transform: rotate(45deg) translateY(-100%);
+    }
+    100% {
+        transform: rotate(45deg) translateY(100%);
+    }
 }
