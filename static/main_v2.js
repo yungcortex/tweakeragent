@@ -3,23 +3,38 @@ function sendMessage() {
     const message = userInput.value.trim();
 
     if (message) {
-        addMessage(message, true);
+        addMessage(`You: ${message}`, true);
         userInput.value = '';
 
-        fetch('/chat', {
+        // Determine which endpoint to use based on the command
+        let endpoint = '/chat';
+        if (message.startsWith('/analyze')) {
+            endpoint = '/ask';  // Use the /ask endpoint for analysis commands
+        }
+
+        fetch(endpoint, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({ message: message })
         })
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+            return response.json();
+        })
         .then(data => {
-            addMessage(data.response, false);
+            if (data.response) {
+                addMessage(data.response, false);
+            } else {
+                addMessage('Error: No response from server', false);
+            }
         })
         .catch(error => {
             console.error('Error:', error);
-            addMessage('Error processing request.', false);
+            addMessage('Error processing request. Please try again.', false);
         });
     }
 }
@@ -50,6 +65,12 @@ function handleKeyPress(event) {
     if (event.key === 'Enter') {
         sendMessage();
     }
+}
+
+function analyzeToken(symbol) {
+    const message = `/analyze ${symbol}`;
+    document.getElementById('userInput').value = message;
+    sendMessage();
 }
 
 window.onload = function() {
