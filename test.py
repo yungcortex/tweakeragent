@@ -31,12 +31,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Get the absolute path to the project root directory
-if os.environ.get('RENDER'):
-    # On Render.com
-    project_root = '/opt/render/project/src'
-else:
-    # Local development
-    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # Initialize Flask with the correct paths
 app = Flask(__name__,
@@ -47,13 +42,7 @@ app = Flask(__name__,
 # Add route for main pagev
 @app.route('/')
 def index():
-    try:
-        return render_template('index.html')
-    except Exception as e:
-        print(f"Error loading template: {e}")
-        print(f"Template folder: {app.template_folder}")
-        print(f"Current directory: {os.getcwd()}")
-        return f"Error loading template. Check logs for details.", 500
+    return render_template('index.html')
 
 # Add route for favicon
 @app.route('/favicon.ico')
@@ -1078,5 +1067,6 @@ class MarketAnalysis:
 
 
 if __name__ == '__main__':
+    # Use environment variables for host and port
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
