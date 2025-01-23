@@ -1,31 +1,16 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>TweakerAgent</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tweaker Agent</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body>
     <div class="chat-container">
-        <div class="title-bar">
-            <div class="title-buttons">
-                <span class="minimize">_</span>
-                <span class="maximize">□</span>
-                <span class="close">×</span>
-            </div>
-            TweakerAgent - Neural Core v2.1
-        </div>
         <div class="messages" id="messages">
-            <div class="message agent-message">
-                Agent: initializing cynicism protocols... try /analyze <coin> or /help
-            </div>
+            <!-- Messages will appear here -->
         </div>
         <div class="input-container">
-            <input type="text"
-                   id="userInput"
-                   placeholder="Type /analyze btc or /help..."
-                   autocomplete="off"
-                   onkeypress="handleKeyPress(event)">
+            <input type="text" id="userInput" placeholder="Type your message..." onkeypress="handleKeyPress(event)">
             <button onclick="sendMessage()">Send</button>
         </div>
     </div>
