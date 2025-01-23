@@ -140,10 +140,10 @@ def get_market_sentiment(indicators):
     }
 
 def get_token_data(token_id):
-    """Get token data with technical analysis"""
+    """Get token data from multiple sources"""
     try:
+        # Try Binance for major coins
         if token_id.upper() in ['BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'DOGE', 'ADA', 'DOT', 'MATIC', 'LINK']:
-            # Get current price data
             symbol = token_id.upper()
             price_resp = requests.get(f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}USDT")
             ticker_resp = requests.get(f"https://api.binance.com/api/v3/ticker/24hr?symbol={symbol}USDT")
@@ -151,61 +151,94 @@ def get_token_data(token_id):
             if price_resp.status_code == 200 and ticker_resp.status_code == 200:
                 price_data = price_resp.json()
                 ticker_data = ticker_resp.json()
+                return {
+                    'price': float(price_data['price']),
+                    'change_24h': float(ticker_data['priceChangePercent']),
+                    'volume_24h': float(ticker_data['volume']) * float(price_data['price']),
+                    'source': 'binance'
+                }
 
-                # Get technical analysis data
-                kline_data = get_kline_data(symbol)
-                if kline_data is not None:
-                    indicators = calculate_indicators(kline_data)
-                    sentiment = get_market_sentiment(indicators)
-
+        # Try DexScreener for any token
+        try:
+            dex_resp = requests.get(f"https://api.dexscreener.com/latest/dex/search?q={token_id}")
+            if dex_resp.status_code == 200:
+                data = dex_resp.json()
+                if data.get('pairs') and len(data['pairs']) > 0:
+                    pair = data['pairs'][0]  # Get most liquid pair
                     return {
-                        'price': float(price_data['price']),
-                        'change_24h': float(ticker_data['priceChangePercent']),
-                        'volume_24h': float(ticker_data['volume']) * float(price_data['price']),
-                        'source': 'binance',
-                        'technical': {
-                            'rsi': indicators['rsi'],
-                            'sentiment': sentiment['sentiment'],
-                            'trend_strength': sentiment['trend_strength'],
-                            'short_term_change': sentiment['price_change'],
-                            'rsi_condition': sentiment['rsi_condition']
+                        'price': float(pair['priceUsd']),
+                        'change_24h': float(pair.get('priceChange', {}).get('h24', 0)),
+                        'volume_24h': float(pair.get('volume', {}).get('h24', 0)),
+                        'source': 'dexscreener',
+                        'extra': {
+                            'liquidity': pair.get('liquidity', {}).get('usd', 0),
+                            'dex': pair.get('dexId', 'unknown'),
+                            'name': pair.get('baseToken', {}).get('name', 'unknown')
                         }
                     }
+        except Exception as e:
+            logger.error(f"DexScreener error: {str(e)}")
+
+        # Try PumpFun API
+        try:
+            pump_resp = requests.get(f"https://api.pump.fun/api/v1/token/search?q={token_id}")
+            if pump_resp.status_code == 200:
+                data = pump_resp.json()
+                if data and len(data) > 0:
+                    token = data[0]
+                    return {
+                        'price': float(token['price']),
+                        'change_24h': float(token.get('price_change_24h', 0)),
+                        'volume_24h': float(token.get('volume_24h', 0)),
+                        'source': 'pump.fun',
+                        'extra': {
+                            'name': token.get('name', 'unknown'),
+                            'symbol': token.get('symbol', 'unknown')
+                        }
+                    }
+        except Exception as e:
+            logger.error(f"PumpFun error: {str(e)}")
+
     except Exception as e:
         logger.error(f"Error in get_token_data: {str(e)}")
     return None
 
 def format_analysis(analysis_data):
-    """Format market analysis with technical insights"""
+    """Format market analysis with token info"""
     try:
         price = analysis_data.get('price', 0)
         change = analysis_data.get('change_24h', 0)
         volume = analysis_data.get('volume_24h', 0)
-        technical = analysis_data.get('technical', {})
+        source = analysis_data.get('source', 'unknown')
+        extra = analysis_data.get('extra', {})
 
-        # Prediction phrases based on technical analysis
-        sentiment = technical.get('sentiment', 0)
-        trend_strength = technical.get('trend_strength', 'neutral')
-        rsi_condition = technical.get('rsi_condition', 'neutral')
-
-        prediction_phrases = [
-            "looking like a breakout incoming" if sentiment > 1 else "might see a pullback soon" if sentiment < -1 else "consolidating for next move",
-            f"momentum is {trend_strength} on the 30s chart",
-            f"market is {rsi_condition} right now",
-            "buy pressure building up" if sentiment > 0 else "sellers taking control" if sentiment < 0 else "traders in standoff"
-        ]
+        # Get token name if available
+        token_name = extra.get('name', 'this token')
 
         # Market action phrases
         action_phrases = [
             f"price action at ${price:.8f}",
             f"volume pumping at ${volume:,.2f}",
-            f"{'climbing' if change > 0 else 'dropping'} {abs(change):.2f}% on the daily",
-            random.choice(prediction_phrases)
+            f"{'pumping' if change > 0 else 'dumping'} {abs(change):.2f}% on the daily"
         ]
 
-        # Randomize order and select 3 phrases
+        # Add extra info if available
+        if extra.get('liquidity'):
+            action_phrases.append(f"liquidity pool at ${extra['liquidity']:,.2f}")
+        if extra.get('dex'):
+            action_phrases.append(f"trading on {extra['dex']}")
+
+        # Add market prediction
+        if change > 5:
+            action_phrases.append("looking super bullish right now")
+        elif change < -5:
+            action_phrases.append("bears taking control")
+        else:
+            action_phrases.append("consolidating for next move")
+
+        # Randomize order and select 3-4 phrases
         random.shuffle(action_phrases)
-        selected_phrases = action_phrases[:3]
+        selected_phrases = action_phrases[:random.randint(3, 4)]
 
         # Join with varied connectors
         connectors = [' ! ', ' - ', ' && ', ' >> ']
@@ -240,30 +273,36 @@ def ask():
     try:
         data = request.json
         message = data.get('message', '').strip().lower()
-        logger.info(f"Received message: {message}")  # Add logging
+        logger.info(f"Received message: {message}")
 
-        # Check if it's a crypto query - simplify detection
-        if any(word in message for word in ['sol', 'btc', 'eth', 'price', '$', 'check']):
-            # Extract token - simplified logic
-            message = message.replace('price of ', '').replace('check ', '')
-            message = message.replace('$', '').replace('#', '')
+        # Extract token - support various formats
+        token = None
 
-            # Clean the token
-            token = message.split()[0].upper()  # Take first word and uppercase it
-            logger.info(f"Extracted token: {token}")  # Add logging
+        # Remove common prefixes and get the token
+        message = message.replace('price of ', '').replace('check ', '')
+        message = message.replace('how is ', '').replace('what is ', '')
+        message = message.replace('$', '').replace('#', '')
 
-            if token in ['SOL', 'BTC', 'ETH', 'BNB', 'XRP', 'DOGE', 'ADA', 'DOT', 'MATIC', 'LINK']:
-                analysis_data = get_token_data(token)
-                if analysis_data:
-                    response = format_analysis(analysis_data)
-                    return jsonify({"response": response})
-                else:
-                    return jsonify({"response": "having trouble getting that data! try again!"})
+        words = message.split()
+        if words:
+            token = words[0]  # Take first word as token
 
-            return jsonify({"response": "i only know major coins right now! try BTC, ETH, SOL, etc"})
+            # If it's a contract address, use as is
+            if token.startswith('0x'):
+                token = token
+            else:
+                # Try to find the token/coin name
+                token = token.strip().lower()
 
-        # For non-crypto queries, get a random response
-        return jsonify({"response": get_random_response()})
+        if token:
+            analysis_data = get_token_data(token)
+            if analysis_data:
+                response = format_analysis(analysis_data)
+                return jsonify({"response": response})
+            else:
+                return jsonify({"response": "can't find that token! double check the name or address!"})
+
+        return jsonify({"response": "what token should i look up? give me a name or address!"})
 
     except Exception as e:
         logger.error(f"Error in ask route: {str(e)}")
