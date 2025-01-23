@@ -6,18 +6,43 @@ function sendMessage() {
         addMessage(`You: ${message}`, true);
         userInput.value = '';
 
-        // Determine which endpoint to use based on the command
-        let endpoint = '/chat';
-        if (message.startsWith('/analyze')) {
-            endpoint = '/ask';  // Use the /ask endpoint for analysis commands
+        // Check if the message is asking about a crypto price or analysis
+        const cryptoKeywords = ['price', 'analyze', 'check', 'how much', 'how is', 'what is'];
+        const commonTickers = ['btc', 'eth', 'sol', 'bnb', 'xrp', 'doge', 'ada', 'dot', 'matic', 'link'];
+
+        // Convert message to lowercase for easier matching
+        const lowerMessage = message.toLowerCase();
+
+        // Check if message contains a crypto keyword and either a common ticker or looks like a contract address
+        const isAskingAboutCrypto = (
+            cryptoKeywords.some(keyword => lowerMessage.includes(keyword)) ||
+            commonTickers.some(ticker => lowerMessage.includes(ticker)) ||
+            /0x[a-fA-F0-9]{40}/.test(message) // Check for ETH-style addresses
+        );
+
+        // Extract the potential token identifier
+        let token = '';
+        if (isAskingAboutCrypto) {
+            // Try to find a common ticker in the message
+            token = commonTickers.find(ticker => lowerMessage.includes(ticker)) || '';
+
+            // If no common ticker found, check for contract address
+            if (!token) {
+                const addressMatch = message.match(/0x[a-fA-F0-9]{40}/);
+                if (addressMatch) {
+                    token = addressMatch[0];
+                }
+            }
         }
 
-        fetch(endpoint, {
+        fetch('/ask', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ message: message })
+            body: JSON.stringify({
+                message: isAskingAboutCrypto ? `/analyze ${token || message}` : message
+            })
         })
         .then(response => {
             if (!response.ok) {
@@ -67,13 +92,7 @@ function handleKeyPress(event) {
     }
 }
 
-function analyzeToken(symbol) {
-    const message = `/analyze ${symbol}`;
-    document.getElementById('userInput').value = message;
-    sendMessage();
-}
-
 window.onload = function() {
     document.getElementById('userInput').focus();
-    addMessage('Welcome! Try /analyze <coin> for market analysis or /help for commands.', false);
+    addMessage('Hi! I can help you check crypto prices and market analysis. Try asking about any coin like "How is BTC doing?" or "Check SOL price"', false);
 };
