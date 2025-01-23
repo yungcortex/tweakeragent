@@ -30,19 +30,30 @@ COINGECKO_IDS = {
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Get the absolute path to the parent directory
-parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# Get the absolute path to the project root directory
+if os.environ.get('RENDER'):
+    # On Render.com
+    project_root = '/opt/render/project/src'
+else:
+    # Local development
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# Initialize Flask with absolute paths
+# Initialize Flask with the correct paths
 app = Flask(__name__,
            static_url_path='/static',
-           static_folder=os.path.join(parent_dir, 'static'),
-           template_folder=os.path.join(parent_dir, 'templates'))
+           static_folder=os.path.join(project_root, 'static'),
+           template_folder=os.path.join(project_root, 'templates'))
 
 # Add route for main pagev
 @app.route('/')
 def index():
-    return render_template('index.html')
+    try:
+        return render_template('index.html')
+    except Exception as e:
+        print(f"Error loading template: {e}")
+        print(f"Template folder: {app.template_folder}")
+        print(f"Current directory: {os.getcwd()}")
+        return f"Error loading template. Check logs for details.", 500
 
 # Add route for favicon
 @app.route('/favicon.ico')
