@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 import os
 import requests
 import logging
@@ -8,7 +8,7 @@ from datetime import datetime
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = Flask(__name__)
+app = Flask(__name__, template_folder='../templates', static_folder='../static')
 
 def get_token_data(token_id):
     """Get real-time token data using Jupiter API"""
@@ -97,7 +97,7 @@ def format_analysis(analysis_data):
 
 @app.route('/')
 def home():
-    return jsonify({"status": "online", "message": "Tweaker Agent is running!"})
+    return render_template('index.html')
 
 @app.route('/ask', methods=['POST'])
 def ask():
