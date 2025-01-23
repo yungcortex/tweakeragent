@@ -10,6 +10,10 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__, template_folder='../templates', static_folder='../static')
 
+@app.route('/')
+def home():
+    return render_template('index.html')
+
 def get_token_data(token_id):
     """Get real-time token data using Jupiter API"""
     try:
@@ -94,10 +98,6 @@ def format_analysis(analysis_data):
     except Exception as e:
         logger.error(f"Error formatting analysis: {str(e)}")
         return "error formatting data"
-
-@app.route('/')
-def home():
-    return render_template('index.html')
 
 @app.route('/ask', methods=['POST'])
 def ask():
