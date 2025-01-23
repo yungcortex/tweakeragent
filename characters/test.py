@@ -9,6 +9,8 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 import ta
+import aiohttp
+import asyncio
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -139,146 +141,119 @@ def get_market_sentiment(indicators):
         'rsi_condition': "overbought" if indicators['rsi'] > 70 else "oversold" if indicators['rsi'] < 30 else "neutral"
     }
 
-def get_token_data(token_id):
-    """Get real-time token data with accurate prices"""
+async def get_jupiter_price(token_address):
+    """Get real-time price from Jupiter API"""
     try:
-        # Normalize token input
+        # Jupiter API endpoints
+        price_url = f"https://price.jup.ag/v4/price?ids={token_address}"
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.get(price_url) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    return data.get('data', {}).get(token_address)
+    except Exception as e:
+        logger.error(f"Jupiter API error: {str(e)}")
+    return None
+
+def get_token_address(token_symbol):
+    """Get token address for known tokens"""
+    token_addresses = {
+        'sol': 'So11111111111111111111111111111111111111112',  # Native SOL
+        'bonk': 'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263',  # BONK
+        'wen': 'WENWENvqqNya429ubCdXG1xHz4XGxdC3SdqmeVNyHLr7',  # WEN
+        'jup': 'JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN',  # JUP
+        'rac': 'RAC3qCKy6CHt6HtMYDhDQvet8NyqRWgbKnTMhVzKfwt',  # RAC
+        'pyth': 'HZ1JovNiVvGrGNiiYvEozEVgZ88xvNbhB9bmHhxQuTc9',  # PYTH
+        # Add more tokens as needed
+    }
+    return token_addresses.get(token_symbol.lower())
+
+async def get_token_data_async(token_id):
+    """Get real-time token data using Jupiter API"""
+    try:
         token_id = token_id.lower().strip()
-
-        # Handle major coins with Binance API first (most real-time prices)
-        major_coins = {
-            'sol': 'SOLUSDT',
-            'btc': 'BTCUSDT',
-            'eth': 'ETHUSDT',
-            'bnb': 'BNBUSDT',
-            'xrp': 'XRPUSDT',
-            'doge': 'DOGEUSDT',
-            'ada': 'ADAUSDT',
-            'matic': 'MATICUSDT',
-            'link': 'LINKUSDT'
-        }
-
-        if token_id in major_coins:
-            symbol = major_coins[token_id]
-            # Get real-time price from Binance
-            price_url = f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}"
-            ticker_url = f"https://api.binance.com/api/v3/ticker/24hr?symbol={symbol}"
-
-            price_resp = requests.get(price_url)
-            ticker_resp = requests.get(ticker_url)
-
-            if price_resp.status_code == 200 and ticker_resp.status_code == 200:
-                price_data = price_resp.json()
-                ticker_data = ticker_resp.json()
-
-                # Get market cap from CoinGecko for completeness
-                cg_ids = {
-                    'sol': 'solana',
-                    'btc': 'bitcoin',
-                    'eth': 'ethereum',
-                    'bnb': 'binancecoin',
-                    'xrp': 'ripple',
-                    'doge': 'dogecoin',
-                    'ada': 'cardano',
-                    'matic': 'matic-network',
-                    'link': 'chainlink'
+        token_address = get_token_address(token_id)
+        
+        if not token_address:
+            return None
+            
+        # Get current price and data from Jupiter
+        price_data = await get_jupiter_price(token_address)
+        
+        if price_data:
+            current_price = float(price_data['price'])
+            
+            # Calculate 30s change
+            thirty_sec_ago = time.time() - 30
+            
+            return {
+                'price': current_price,
+                'price_30s': price_data.get('price_30s', current_price),
+                'change_30s': price_data.get('change_30s', 0),
+                'volume_24h': float(price_data.get('volume24h', 0)),
+                'source': 'jupiter',
+                'extra': {
+                    'liquidity': price_data.get('liquidity', 0),
+                    'dex': 'Jupiter',
+                    'last_updated': datetime.now().strftime('%H:%M:%S')
                 }
-
-                mcap = 0
-                try:
-                    cg_url = f"https://api.coingecko.com/api/v3/simple/price?ids={cg_ids[token_id]}&vs_currencies=usd&include_market_cap=true"
-                    cg_resp = requests.get(cg_url)
-                    if cg_resp.status_code == 200:
-                        cg_data = cg_resp.json()
-                        mcap = cg_data[cg_ids[token_id]]['usd_market_cap']
-                except:
-                    pass
-
-                return {
-                    'price': float(price_data['price']),
-                    'market_cap': mcap,
-                    'change_24h': float(ticker_data['priceChangePercent']),
-                    'volume_24h': float(ticker_data['volume']) * float(price_data['price']),
-                    'source': 'binance',
-                    'extra': {
-                        'high_24h': float(ticker_data['highPrice']),
-                        'low_24h': float(ticker_data['lowPrice'])
-                    }
-                }
-
-        # For other tokens, try DexScreener
-        dex_resp = requests.get(f"https://api.dexscreener.com/latest/dex/search?q={token_id}")
-        if dex_resp.status_code == 200:
-            data = dex_resp.json()
-            if data.get('pairs') and len(data['pairs']) > 0:
-                pair = data['pairs'][0]  # Get most liquid pair
-                mcap = float(pair['priceUsd']) * float(pair.get('baseToken', {}).get('totalSupply', 0))
-                return {
-                    'price': float(pair['priceUsd']),
-                    'market_cap': mcap,
-                    'change_24h': float(pair.get('priceChange', {}).get('h24', 0)),
-                    'volume_24h': float(pair.get('volume', {}).get('h24', 0)),
-                    'source': 'dexscreener',
-                    'extra': {
-                        'liquidity': pair.get('liquidity', {}).get('usd', 0),
-                        'dex': pair.get('dexId', 'unknown'),
-                        'name': pair.get('baseToken', {}).get('name', 'unknown')
-                    }
-                }
-
+            }
+            
     except Exception as e:
         logger.error(f"Error in get_token_data: {str(e)}")
     return None
 
 def format_analysis(analysis_data):
-    """Format market analysis with accurate numbers"""
+    """Format market analysis with 30s real-time data"""
     try:
         price = analysis_data.get('price', 0)
-        mcap = analysis_data.get('market_cap', 0)
-        change = analysis_data.get('change_24h', 0)
+        price_30s = analysis_data.get('price_30s', price)
+        change_30s = ((price - price_30s) / price_30s) * 100 if price_30s else 0
         volume = analysis_data.get('volume_24h', 0)
-        source = analysis_data.get('source', 'unknown')
         extra = analysis_data.get('extra', {})
 
-        # Format market cap
-        if mcap >= 1_000_000_000:
-            mcap_str = f"${mcap/1_000_000_000:.2f}B"
-        elif mcap >= 1_000_000:
-            mcap_str = f"${mcap/1_000_000:.2f}M"
-        else:
-            mcap_str = f"${mcap:,.0f}"
-
-        # Format price based on its magnitude
-        if price < 0.01:
-            price_str = f"${price:.8f}"
-        elif price < 1:
+        # Format price
+        if price >= 1:
+            price_str = f"${price:,.2f}"
+        elif price >= 0.01:
             price_str = f"${price:.4f}"
         else:
-            price_str = f"${price:,.2f}"
+            price_str = f"${price:.8f}"
 
-        # Base response
-        base_info = f"Price: {price_str} - MCap: {mcap_str}"
-
-        # Additional info
-        extra_parts = [
-            f"24h Change: {change:+.2f}%",
-            f"Volume: ${volume:,.0f}"
+        # Base response with 30s data
+        parts = [
+            f"Price: {price_str}",
+            f"30s Change: {change_30s:+.3f}%"
         ]
+        
+        # Add volume
+        if volume >= 1_000_000_000:
+            volume_str = f"${volume/1_000_000_000:.2f}B"
+        elif volume >= 1_000_000:
+            volume_str = f"${volume/1_000_000:.2f}M"
+        else:
+            volume_str = f"${volume:,.0f}"
+        parts.append(f"Volume: {volume_str}")
 
+        # Add liquidity if available
         if extra.get('liquidity'):
-            extra_parts.append(f"Liquidity: ${extra['liquidity']:,.0f}")
-        if extra.get('dex'):
-            extra_parts.append(f"DEX: {extra['dex']}")
-        if extra.get('high_24h'):
-            extra_parts.append(f"24h High: ${float(extra['high_24h']):,.2f}")
-        if extra.get('low_24h'):
-            extra_parts.append(f"24h Low: ${float(extra['low_24h']):,.2f}")
+            liq = float(extra['liquidity'])
+            if liq >= 1_000_000:
+                liq_str = f"${liq/1_000_000:.2f}M"
+            else:
+                liq_str = f"${liq:,.0f}"
+            parts.append(f"Liquidity: {liq_str}")
 
-        return f"{base_info} ! {' - '.join(extra_parts)}"
+        # Add last updated time
+        if extra.get('last_updated'):
+            parts.append(f"Updated: {extra['last_updated']}")
 
+        return " - ".join(parts)
+        
     except Exception as e:
         logger.error(f"Error formatting analysis: {str(e)}")
-        return "analyzing market conditions! stand by for update!"
+        return "error getting price data! try again!"
 
 def get_random_response():
     """Get a random non-analysis response"""
@@ -306,35 +281,34 @@ def ask():
         data = request.json
         message = data.get('message', '').strip().lower()
         logger.info(f"Received message: {message}")
-
+        
         # Extract token - support various formats
         token = None
-
+        
         # Remove common prefixes and get the token
         message = message.replace('price of ', '').replace('check ', '')
         message = message.replace('how is ', '').replace('what is ', '')
         message = message.replace('$', '').replace('#', '')
-
+        
         words = message.split()
         if words:
             token = words[0]  # Take first word as token
-
-            # If it's a contract address, use as is
-            if token.startswith('0x'):
-                token = token
-            else:
-                # Try to find the token/coin name
-                token = token.strip().lower()
-
-        if token:
-            analysis_data = get_token_data(token)
+            
+            # Create event loop for async call
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+            # Get token data
+            analysis_data = loop.run_until_complete(get_token_data_async(token))
+            loop.close()
+            
             if analysis_data:
                 response = format_analysis(analysis_data)
                 return jsonify({"response": response})
             else:
-                return jsonify({"response": "can't find that token! double check the name or address!"})
-
-        return jsonify({"response": "what token should i look up? give me a name or address!"})
+                return jsonify({"response": "can't find that token! check the symbol or try another one!"})
+        
+        return jsonify({"response": "what token should i look up? give me a symbol!"})
 
     except Exception as e:
         logger.error(f"Error in ask route: {str(e)}")
