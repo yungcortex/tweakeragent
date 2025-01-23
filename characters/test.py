@@ -55,6 +55,10 @@ APIS = {
     'binance': {
         'url': "https://api.binance.com/api/v3",
         'timeout': 5
+    },
+    'raydium': {
+        'url': "https://api.raydium.io/v2",
+        'timeout': 10
     }
 }
 
@@ -91,7 +95,9 @@ async def get_binance_data(session: aiohttp.ClientSession, symbol: str) -> Optio
 async def get_dexscreener_data(session: aiohttp.ClientSession, token_id: str) -> Optional[Dict[str, Any]]:
     """Get data from DexScreener"""
     try:
-        async with session.get(f"{APIS['dexscreener']['url']}/tokens/{token_id}") as resp:
+        # Handle both contract addresses and token symbols
+        search_param = token_id if token_id.startswith('0x') else f"search?q={token_id}"
+        async with session.get(f"{APIS['dexscreener']['url']}/pairs/{search_param}") as resp:
             if resp.status == 200:
                 data = await resp.json()
                 if data.get('pairs') and len(data['pairs']) > 0:
@@ -172,17 +178,18 @@ async def get_token_data(token_id: str) -> Optional[Dict[str, Any]]:
     """Get token data from multiple sources with fallbacks"""
     async with aiohttp.ClientSession() as session:
         tasks = []
+        
+        # Always try PumpFun and DexScreener first for any token
+        tasks.extend([
+            get_pumpfun_data(session, token_id),
+            get_dexscreener_data(session, token_id)
+        ])
 
-        # Create tasks for all API calls
+        # For major tokens, also try Binance
         if token_id.upper() in ['BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'DOGE']:
             tasks.append(get_binance_data(session, token_id))
 
-        # Add PumpFun for all queries since it might have newer tokens
-        tasks.append(get_pumpfun_data(session, token_id))
-
-        if token_id.startswith('0x'):
-            tasks.append(get_dexscreener_data(session, token_id))
-
+        # Try CoinGecko and DefiLlama as fallbacks
         tasks.extend([
             get_coingecko_data(session, token_id),
             get_defillama_data(session, token_id)
@@ -195,18 +202,21 @@ async def get_token_data(token_id: str) -> Optional[Dict[str, Any]]:
         valid_results = [r for r in results if isinstance(r, dict)]
 
         if valid_results:
-            # Prioritize PumpFun data if available
-            pump_fun_data = next((r for r in valid_results if r['source'] == 'pump_fun'), None)
-            if pump_fun_data:
-                pump_fun_data['sources'] = [r['source'] for r in valid_results]
-                return pump_fun_data
+            # Prioritize sources in this order: PumpFun > DexScreener > Others
+            for source in ['pump_fun', 'dexscreener']:
+                source_data = next((r for r in valid_results if r['source'] == source), None)
+                if source_data:
+                    source_data['sources'] = [r['source'] for r in valid_results]
+                    return source_data
 
-            # Fall back to combined data from other sources
+            # If no preferred source, use the first available with combined sources
             combined_data = valid_results[0]
+            combined_data['sources'] = [r['source'] for r in valid_results]
+            
+            # Average the prices if we have multiple sources
             if len(valid_results) > 1:
                 prices = [r['price'] for r in valid_results if 'price' in r]
                 combined_data['price'] = sum(prices) / len(prices)
-                combined_data['sources'] = [r['source'] for r in valid_results]
 
             return combined_data
 
@@ -309,6 +319,46 @@ def get_random_response():
     ]
     return random.choice(responses)
 
+def extract_token(msg: str) -> Optional[str]:
+    """Enhanced token detection"""
+    msg = msg.lower().strip()
+    words = msg.split()
+    
+    for word in words:
+        # Clean the word
+        word = word.strip('?!.,')
+        
+        # Contract address
+        if word.startswith('0x'):
+            return word
+        
+        # $ symbol
+        if word.startswith('$'):
+            return word[1:]
+        
+        # Remove common prefixes
+        if word.startswith('price'):
+            continue
+        if word in ['of', 'for', 'the']:
+            continue
+            
+        # Check for token symbols
+        if word.isalnum():  # Basic check for token symbols
+            return word
+            
+    # Check for specific patterns
+    if 'price of' in msg:
+        parts = msg.split('price of')
+        if len(parts) > 1:
+            return parts[1].strip()
+            
+    if '/analyze' in msg:
+        parts = msg.split('/analyze')
+        if len(parts) > 1:
+            return parts[1].strip()
+            
+    return None
+
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -318,40 +368,10 @@ def ask():
     try:
         data = request.json
         message = data.get('message', '').strip().lower()
-
-        # Enhanced token detection
-        def extract_token(msg):
-            # Split message into words
-            words = msg.split()
-            
-            # Look for contract address or token symbol
-            for word in words:
-                # Remove common punctuation
-                word = word.strip('?!.,')
-                
-                # Check for contract address
-                if word.startswith('0x'):
-                    return word
-                
-                # Check for $ symbol
-                if word.startswith('$'):
-                    return word[1:]  # Remove the $ symbol
-                
-                # Check for /analyze command
-                if word.startswith('/analyze'):
-                    remaining = msg[msg.index('/analyze') + 9:].strip()
-                    return remaining if remaining else None
-                
-                # Check for "price of" format
-                if 'price of' in msg:
-                    remaining = msg[msg.index('price of') + 8:].strip()
-                    return remaining if remaining else None
-
-            return None
-
+        
         # Extract token from message
         token_id = extract_token(message)
-
+        
         if token_id:
             # Get token data asynchronously
             loop = asyncio.new_event_loop()
@@ -365,7 +385,6 @@ def ask():
             else:
                 return jsonify({"response": "token giving me anxiety... can't find it anywhere... like my will to live..."})
 
-        # For non-token queries, get a random response
         return jsonify({"response": get_random_response()})
 
     except Exception as e:
