@@ -97,21 +97,22 @@ async def get_dexscreener_data(session: aiohttp.ClientSession, token_id: str) ->
     try:
         # Remove any $ prefix and spaces
         token_id = token_id.replace('$', '').strip()
+        print(f"Querying DexScreener for token: {token_id}")  # Debug print
         
         # Try multiple endpoints for DexScreener
         urls = [
-            f"{APIS['dexscreener']['url']}/pairs/solana/{token_id}",  # Direct Solana lookup
-            f"{APIS['dexscreener']['url']}/pairs/search?q={token_id}",  # Search endpoint
-            f"{APIS['dexscreener']['url']}/pairs/ethereum/{token_id}"   # Ethereum lookup
+            f"{APIS['dexscreener']['url']}/pairs/solana/{token_id}",
+            f"{APIS['dexscreener']['url']}/pairs/search?q={token_id}",
+            f"{APIS['dexscreener']['url']}/pairs/ethereum/{token_id}"
         ]
         
         for url in urls:
-            logger.info(f"Trying DexScreener URL: {url}")
+            print(f"Trying DexScreener URL: {url}")  # Debug print
             try:
                 async with session.get(url) as resp:
                     if resp.status == 200:
                         data = await resp.json()
-                        logger.info(f"DexScreener response: {data}")
+                        print(f"DexScreener response: {data}")  # Debug print
                         
                         pairs = data.get('pairs', [])
                         if pairs and len(pairs) > 0:
@@ -128,10 +129,11 @@ async def get_dexscreener_data(session: aiohttp.ClientSession, token_id: str) ->
                                 }
                             }
             except Exception as e:
-                logger.error(f"Error with URL {url}: {str(e)}")
+                print(f"Error with DexScreener URL {url}: {str(e)}")  # Debug print
                 continue
                 
     except Exception as e:
+        print(f"DexScreener API error for {token_id}: {str(e)}")  # Debug print
         logger.error(f"DexScreener API error for {token_id}: {str(e)}")
     return None
 
@@ -418,10 +420,12 @@ def ask():
     try:
         data = request.json
         message = data.get('message', '').strip()
+        print(f"Received message: {message}")  # Debug print
         logger.info(f"Received message: {message}")
         
         # Extract token from message
         token_id = extract_token(message)
+        print(f"Extracted token ID: {token_id}")  # Debug print
         logger.info(f"Extracted token: {token_id}")
         
         if token_id:
@@ -429,19 +433,23 @@ def ask():
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             analysis_data = loop.run_until_complete(get_token_data(token_id))
+            print(f"Analysis data: {analysis_data}")  # Debug print
             loop.close()
             
             logger.info(f"Analysis data: {analysis_data}")
 
             if analysis_data:
                 response = format_analysis(analysis_data)
+                print(f"Formatted response: {response}")  # Debug print
                 return jsonify({"response": response})
             else:
+                print("No analysis data found")  # Debug print
                 return jsonify({"response": "token giving me anxiety... can't find it anywhere... like my will to live..."})
 
         return jsonify({"response": get_random_response()})
 
     except Exception as e:
+        print(f"Error in ask route: {str(e)}")  # Debug print
         logger.error(f"Error processing request: {str(e)}")
         logger.exception(e)  # This will print the full stack trace
         return jsonify({"response": "having a mental breakdown... try again later... like my trading career..."})
