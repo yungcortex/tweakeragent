@@ -98,52 +98,41 @@ async def get_dexscreener_data(session: aiohttp.ClientSession, token_id: str) ->
         # Remove any $ prefix and spaces
         token_id = token_id.replace('$', '').strip()
         
-        # For Solana addresses, don't include the chain prefix
-        url = f"{APIS['dexscreener']['url']}/pairs/solana/{token_id}"
-        logger.info(f"Querying DexScreener: {url}")
+        # Try multiple endpoints for DexScreener
+        urls = [
+            f"{APIS['dexscreener']['url']}/pairs/solana/{token_id}",  # Direct Solana lookup
+            f"{APIS['dexscreener']['url']}/pairs/search?q={token_id}",  # Search endpoint
+            f"{APIS['dexscreener']['url']}/pairs/ethereum/{token_id}"   # Ethereum lookup
+        ]
         
-        async with session.get(url) as resp:
-            if resp.status == 200:
-                data = await resp.json()
-                logger.info(f"DexScreener response received: {data}")
-                
-                # Handle both single pair and search results
-                pairs = data.get('pairs', [])
-                if isinstance(pairs, list) and len(pairs) > 0:
-                    pair = pairs[0]  # Get the first pair
-                    return {
-                        'price': float(pair.get('priceUsd', 0)),
-                        'change_24h': float(pair.get('priceChange', {}).get('h24', 0)),
-                        'volume_24h': float(pair.get('volume', {}).get('h24', 0)),
-                        'source': 'dexscreener',
-                        'extra': {
-                            'liquidity': pair.get('liquidity', {}).get('usd', 0),
-                            'dex': pair.get('dexId', 'unknown'),
-                            'chain': pair.get('chainId', 'unknown')
-                        }
-                    }
-                else:
-                    # Try alternative search endpoint if direct lookup fails
-                    search_url = f"{APIS['dexscreener']['url']}/pairs/search?q={token_id}"
-                    async with session.get(search_url) as search_resp:
-                        if search_resp.status == 200:
-                            search_data = await search_resp.json()
-                            if search_data.get('pairs') and len(search_data['pairs']) > 0:
-                                pair = search_data['pairs'][0]
-                                return {
-                                    'price': float(pair.get('priceUsd', 0)),
-                                    'change_24h': float(pair.get('priceChange', {}).get('h24', 0)),
-                                    'volume_24h': float(pair.get('volume', {}).get('h24', 0)),
-                                    'source': 'dexscreener',
-                                    'extra': {
-                                        'liquidity': pair.get('liquidity', {}).get('usd', 0),
-                                        'dex': pair.get('dexId', 'unknown'),
-                                        'chain': pair.get('chainId', 'unknown')
-                                    }
+        for url in urls:
+            logger.info(f"Trying DexScreener URL: {url}")
+            try:
+                async with session.get(url) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        logger.info(f"DexScreener response: {data}")
+                        
+                        pairs = data.get('pairs', [])
+                        if pairs and len(pairs) > 0:
+                            pair = pairs[0]
+                            return {
+                                'price': float(pair.get('priceUsd', 0)),
+                                'change_24h': float(pair.get('priceChange', {}).get('h24', 0)),
+                                'volume_24h': float(pair.get('volume', {}).get('h24', 0)),
+                                'source': 'dexscreener',
+                                'extra': {
+                                    'liquidity': pair.get('liquidity', {}).get('usd', 0),
+                                    'dex': pair.get('dexId', 'unknown'),
+                                    'chain': pair.get('chainId', 'unknown')
                                 }
+                            }
+            except Exception as e:
+                logger.error(f"Error with URL {url}: {str(e)}")
+                continue
+                
     except Exception as e:
         logger.error(f"DexScreener API error for {token_id}: {str(e)}")
-        logger.exception(e)  # This will print the full stack trace
     return None
 
 async def get_coingecko_data(session: aiohttp.ClientSession, token_id: str) -> Optional[Dict[str, Any]]:
@@ -185,29 +174,39 @@ async def get_defillama_data(session: aiohttp.ClientSession, token_id: str) -> O
 async def get_pumpfun_data(session: aiohttp.ClientSession, token_id: str) -> Optional[Dict[str, Any]]:
     """Get data from Pump.fun API"""
     try:
-        # Remove any $ prefix if present
-        token_id = token_id.replace('$', '')
+        # Remove any $ prefix and spaces
+        token_id = token_id.replace('$', '').strip()
         
-        url = f"{APIS['pump_fun']['url']}/tokens/{token_id}"
-        logger.info(f"Querying PumpFun: {url}")  # Add logging
+        # Try both with and without /tokens/ endpoint
+        urls = [
+            f"{APIS['pump_fun']['url']}/tokens/{token_id}",
+            f"{APIS['pump_fun']['url']}/{token_id}"
+        ]
         
-        async with session.get(url) as resp:
-            if resp.status == 200:
-                data = await resp.json()
-                logger.info(f"PumpFun response: {data}")  # Add logging
+        for url in urls:
+            logger.info(f"Trying PumpFun URL: {url}")
+            try:
+                async with session.get(url) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        logger.info(f"PumpFun response: {data}")
+                        
+                        if data.get('data'):
+                            token_data = data['data']
+                            return {
+                                'price': float(token_data.get('price', 0)),
+                                'change_24h': float(token_data.get('price_change_24h', 0)),
+                                'volume_24h': float(token_data.get('volume_24h', 0)),
+                                'source': 'pump_fun',
+                                'extra': {
+                                    'liquidity': token_data.get('liquidity', 0),
+                                    'dex': 'pump.fun'
+                                }
+                            }
+            except Exception as e:
+                logger.error(f"Error with URL {url}: {str(e)}")
+                continue
                 
-                if data.get('data'):
-                    token_data = data['data']
-                    return {
-                        'price': float(token_data.get('price', 0)),
-                        'change_24h': float(token_data.get('price_change_24h', 0)),
-                        'volume_24h': float(token_data.get('volume_24h', 0)),
-                        'source': 'pump_fun',
-                        'extra': {
-                            'liquidity': token_data.get('liquidity', 0),
-                            'dex': 'pump.fun'
-                        }
-                    }
     except Exception as e:
         logger.error(f"Pump.fun API error for {token_id}: {str(e)}")
     return None
@@ -226,8 +225,8 @@ async def get_token_data(token_id: str) -> Optional[Dict[str, Any]]:
                 get_pumpfun_data(session, token_id)
             ]
             
-            # Add CoinGecko and others for well-known tokens
-            if not token_id.startswith('0x') and len(token_id) < 15:
+            # Add other sources for non-contract tokens
+            if len(token_id) < 30:
                 tasks.extend([
                     get_coingecko_data(session, token_id),
                     get_defillama_data(session, token_id)
@@ -244,11 +243,13 @@ async def get_token_data(token_id: str) -> Optional[Dict[str, Any]]:
             logger.info(f"Valid results found: {len(valid_results)}")
             
             if valid_results:
-                # Prioritize DexScreener for contract addresses
-                if token_id.startswith('0x') or len(token_id) > 30:
-                    dex_result = next((r for r in valid_results if r['source'] == 'dexscreener'), None)
-                    if dex_result:
-                        return dex_result
+                # For contract addresses, prioritize DexScreener and PumpFun
+                if len(token_id) > 30:
+                    for source in ['dexscreener', 'pump_fun']:
+                        result = next((r for r in valid_results if r['source'] == source), None)
+                        if result:
+                            result['sources'] = [r['source'] for r in valid_results]
+                            return result
 
                 # For other tokens, use any available source
                 result = valid_results[0]
