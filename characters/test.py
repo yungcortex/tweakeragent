@@ -98,12 +98,8 @@ async def get_dexscreener_data(session: aiohttp.ClientSession, token_id: str) ->
         # Remove any $ prefix and spaces
         token_id = token_id.replace('$', '').strip()
         
-        # For contract addresses, use the direct pairs endpoint
-        if token_id.startswith('0x'):
-            url = f"{APIS['dexscreener']['url']}/pairs/solana/{token_id}"
-        else:
-            url = f"{APIS['dexscreener']['url']}/pairs/search?q={token_id}"
-        
+        # For Solana addresses, don't include the chain prefix
+        url = f"{APIS['dexscreener']['url']}/pairs/solana/{token_id}"
         logger.info(f"Querying DexScreener: {url}")
         
         async with session.get(url) as resp:
@@ -126,6 +122,25 @@ async def get_dexscreener_data(session: aiohttp.ClientSession, token_id: str) ->
                             'chain': pair.get('chainId', 'unknown')
                         }
                     }
+                else:
+                    # Try alternative search endpoint if direct lookup fails
+                    search_url = f"{APIS['dexscreener']['url']}/pairs/search?q={token_id}"
+                    async with session.get(search_url) as search_resp:
+                        if search_resp.status == 200:
+                            search_data = await search_resp.json()
+                            if search_data.get('pairs') and len(search_data['pairs']) > 0:
+                                pair = search_data['pairs'][0]
+                                return {
+                                    'price': float(pair.get('priceUsd', 0)),
+                                    'change_24h': float(pair.get('priceChange', {}).get('h24', 0)),
+                                    'volume_24h': float(pair.get('volume', {}).get('h24', 0)),
+                                    'source': 'dexscreener',
+                                    'extra': {
+                                        'liquidity': pair.get('liquidity', {}).get('usd', 0),
+                                        'dex': pair.get('dexId', 'unknown'),
+                                        'chain': pair.get('chainId', 'unknown')
+                                    }
+                                }
     except Exception as e:
         logger.error(f"DexScreener API error for {token_id}: {str(e)}")
         logger.exception(e)  # This will print the full stack trace
@@ -202,45 +217,47 @@ async def get_token_data(token_id: str) -> Optional[Dict[str, Any]]:
     try:
         # Clean the token_id
         token_id = token_id.strip().replace('$', '')
-        logger.info(f"Searching for token: {token_id}")  # Add logging
+        logger.info(f"Searching for token: {token_id}")
         
         async with aiohttp.ClientSession() as session:
-            tasks = []
-            
-            # Try all sources for every token
+            # Try all sources concurrently
             tasks = [
-                get_pumpfun_data(session, token_id),
                 get_dexscreener_data(session, token_id),
-                get_coingecko_data(session, token_id),
-                get_defillama_data(session, token_id)
+                get_pumpfun_data(session, token_id)
             ]
             
-            # Add Binance for major tokens
-            if token_id.upper() in ['BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'DOGE']:
-                tasks.append(get_binance_data(session, token_id))
+            # Add CoinGecko and others for well-known tokens
+            if not token_id.startswith('0x') and len(token_id) < 15:
+                tasks.extend([
+                    get_coingecko_data(session, token_id),
+                    get_defillama_data(session, token_id)
+                ])
+                
+                if token_id.upper() in ['BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'DOGE']:
+                    tasks.append(get_binance_data(session, token_id))
 
             # Wait for all API calls to complete
             results = await asyncio.gather(*tasks, return_exceptions=True)
             
             # Filter out errors and None results
             valid_results = [r for r in results if isinstance(r, dict)]
-            logger.info(f"Valid results found: {len(valid_results)}")  # Add logging
+            logger.info(f"Valid results found: {len(valid_results)}")
             
             if valid_results:
-                # Try to get PumpFun or DexScreener data first
-                for preferred_source in ['pump_fun', 'dexscreener']:
-                    source_data = next((r for r in valid_results if r['source'] == preferred_source), None)
-                    if source_data:
-                        source_data['sources'] = [r['source'] for r in valid_results]
-                        return source_data
+                # Prioritize DexScreener for contract addresses
+                if token_id.startswith('0x') or len(token_id) > 30:
+                    dex_result = next((r for r in valid_results if r['source'] == 'dexscreener'), None)
+                    if dex_result:
+                        return dex_result
 
-                # Fallback to any available source
+                # For other tokens, use any available source
                 result = valid_results[0]
                 result['sources'] = [r['source'] for r in valid_results]
                 return result
 
     except Exception as e:
         logger.error(f"Error in get_token_data: {str(e)}")
+        logger.exception(e)
     return None
 
 def format_analysis(analysis_data):
@@ -341,53 +358,54 @@ def get_random_response():
     return random.choice(responses)
 
 def extract_token(msg: str) -> Optional[str]:
-    """Enhanced token detection with better contract address handling"""
+    """Enhanced token detection"""
     try:
         msg = msg.lower().strip()
         
-        # First check for contract addresses (0x...)
-        if '0x' in msg:
-            # Find the start of the contract address
-            start_idx = msg.find('0x')
-            # Extract everything after 0x until a space or end of string
-            contract = msg[start_idx:].split()[0].strip()
-            logger.info(f"Found contract address: {contract}")
-            return contract
+        # Handle contract addresses (including Solana format)
+        words = msg.split()
+        for word in words:
+            # Clean the word
+            word = word.strip('?!.,')
+            
+            # Check for long alphanumeric strings (likely contract addresses)
+            if len(word) > 30 and word.isalnum():
+                logger.info(f"Found contract address: {word}")
+                return word
+            
+            # Check for 0x addresses
+            if word.startswith('0x'):
+                logger.info(f"Found 0x address: {word}")
+                return word
         
-        # Then check for $ prefixed tokens
+        # Handle $ prefixed tokens
         if '$' in msg:
             token = msg[msg.find('$')+1:].split()[0].strip()
             logger.info(f"Found $ prefixed token: {token}")
             return token
         
-        # Check for specific command formats
+        # Handle "price of" format
         if 'price of' in msg:
             token = msg.split('price of')[1].strip()
             logger.info(f"Found 'price of' format: {token}")
             return token
-        
+            
+        # Handle "price for" format
         if 'price for' in msg:
             token = msg.split('price for')[1].strip()
             logger.info(f"Found 'price for' format: {token}")
             return token
-        
-        if '/analyze' in msg:
-            token = msg.split('/analyze')[1].strip()
-            logger.info(f"Found analyze command: {token}")
-            return token
-        
-        # General word detection
-        words = msg.split()
+
+        # Handle general case
         for word in words:
             word = word.strip('?!.,')
             if word.isalnum() and word not in ['price', 'of', 'for', 'the']:
                 logger.info(f"Found token from general text: {word}")
                 return word
-        
+                
         return None
     except Exception as e:
         logger.error(f"Error in extract_token: {str(e)}")
-        logger.exception(e)  # This will print the full stack trace
         return None
 
 @app.route('/')
