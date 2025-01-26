@@ -93,44 +93,65 @@ async def get_binance_data(session: aiohttp.ClientSession, symbol: str) -> Optio
     return None
 
 async def get_dexscreener_data(session: aiohttp.ClientSession, token_id: str) -> Optional[Dict[str, Any]]:
-    """Get data from DexScreener with additional token info"""
+    """Get data from DexScreener API with priority"""
     try:
         # Remove any $ prefix and spaces
-        token_id = token_id.replace('$', '').strip()
+        token_id = token_id.replace('$', '').strip().lower()
         
-        # Try multiple endpoints for DexScreener
-        urls = [
-            f"{APIS['dexscreener']['url']}/pairs/solana/{token_id}",
-            f"{APIS['dexscreener']['url']}/pairs/search?q={token_id}",
-            f"{APIS['dexscreener']['url']}/pairs/ethereum/{token_id}"
-        ]
+        # Try multiple chains for better coverage
+        chains = ['solana', 'ethereum', 'bsc', 'arbitrum', 'polygon']
         
-        for url in urls:
-            try:
-                async with session.get(url) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        pairs = data.get('pairs', [])
-                        if pairs and len(pairs) > 0:
-                            pair = pairs[0]
-                            return {
-                                'price': float(pair.get('priceUsd', 0)),
-                                'change_24h': float(pair.get('priceChange', {}).get('h24', 0)),
-                                'volume_24h': float(pair.get('volume', {}).get('h24', 0)),
-                                'source': 'dexscreener',
-                                'extra': {
-                                    'liquidity': pair.get('liquidity', {}).get('usd', 0),
-                                    'dex': pair.get('dexId', 'unknown'),
-                                    'chain': pair.get('chainId', 'unknown'),
-                                    'address': pair.get('baseToken', {}).get('address', ''),
-                                }
+        # First try direct pair search
+        search_url = f"{APIS['dexscreener']['url']}/pairs/search?q={token_id}"
+        logger.info(f"Searching DexScreener: {search_url}")
+        
+        async with session.get(search_url) as resp:
+            if resp.status == 200:
+                data = await resp.json()
+                pairs = data.get('pairs', [])
+                if pairs and len(pairs) > 0:
+                    pair = pairs[0]  # Get the most relevant pair
+                    return {
+                        'price': float(pair.get('priceUsd', 0)),
+                        'change_24h': float(pair.get('priceChange', {}).get('h24', 0)),
+                        'volume_24h': float(pair.get('volume', {}).get('h24', 0)),
+                        'source': 'dexscreener',
+                        'extra': {
+                            'liquidity': pair.get('liquidity', {}).get('usd', 0),
+                            'dex': pair.get('dexId', 'unknown'),
+                            'chain': pair.get('chainId', 'unknown'),
+                            'address': pair.get('baseToken', {}).get('address', ''),
+                            'holders': 'N/A'  # DexScreener doesn't provide holder count
+                        }
+                    }
+        
+        # If search fails, try each chain
+        for chain in chains:
+            url = f"{APIS['dexscreener']['url']}/pairs/{chain}/{token_id}"
+            logger.info(f"Trying DexScreener chain {chain}: {url}")
+            
+            async with session.get(url) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    pairs = data.get('pairs', [])
+                    if pairs and len(pairs) > 0:
+                        pair = pairs[0]
+                        return {
+                            'price': float(pair.get('priceUsd', 0)),
+                            'change_24h': float(pair.get('priceChange', {}).get('h24', 0)),
+                            'volume_24h': float(pair.get('volume', {}).get('h24', 0)),
+                            'source': 'dexscreener',
+                            'extra': {
+                                'liquidity': pair.get('liquidity', {}).get('usd', 0),
+                                'dex': pair.get('dexId', 'unknown'),
+                                'chain': pair.get('chainId', 'unknown'),
+                                'address': pair.get('baseToken', {}).get('address', ''),
+                                'holders': 'N/A'
                             }
-            except Exception as e:
-                logger.error(f"Error with URL {url}: {str(e)}")
-                continue
-                
+                        }
+
     except Exception as e:
-        logger.error(f"DexScreener API error for {token_id}: {str(e)}")
+        logger.error(f"DexScreener API error: {str(e)}")
     return None
 
 async def get_coingecko_data(session: aiohttp.ClientSession, token_id: str) -> Optional[Dict[str, Any]]:
@@ -210,46 +231,29 @@ async def get_pumpfun_data(session: aiohttp.ClientSession, token_id: str) -> Opt
     return None
 
 async def get_token_data(token_id: str) -> Optional[Dict[str, Any]]:
-    """Get token data from multiple sources with fallbacks"""
+    """Get token data prioritizing DexScreener"""
     try:
-        # Clean the token_id
-        token_id = token_id.strip().replace('$', '')
+        token_id = token_id.strip().replace('$', '').lower()
         logger.info(f"Searching for token: {token_id}")
         
         async with aiohttp.ClientSession() as session:
-            # Try all sources concurrently
+            # Try DexScreener first
+            dex_result = await get_dexscreener_data(session, token_id)
+            if dex_result:
+                dex_result['sources'] = ['dexscreener']
+                return dex_result
+            
+            # Fallback to other sources if DexScreener fails
             tasks = [
-                get_dexscreener_data(session, token_id),
-                get_pumpfun_data(session, token_id)
+                get_coingecko_data(session, token_id),
+                get_binance_data(session, token_id),
+                get_defillama_data(session, token_id)
             ]
             
-            # Add other sources for non-contract tokens
-            if len(token_id) < 30:
-                tasks.extend([
-                    get_coingecko_data(session, token_id),
-                    get_defillama_data(session, token_id)
-                ])
-                
-                if token_id.upper() in ['BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'DOGE']:
-                    tasks.append(get_binance_data(session, token_id))
-
-            # Wait for all API calls to complete
             results = await asyncio.gather(*tasks, return_exceptions=True)
-            
-            # Filter out errors and None results
             valid_results = [r for r in results if isinstance(r, dict)]
-            logger.info(f"Valid results found: {len(valid_results)}")
             
             if valid_results:
-                # For contract addresses, prioritize DexScreener and PumpFun
-                if len(token_id) > 30:
-                    for source in ['dexscreener', 'pump_fun']:
-                        result = next((r for r in valid_results if r['source'] == source), None)
-                        if result:
-                            result['sources'] = [r['source'] for r in valid_results]
-                            return result
-
-                # For other tokens, use any available source
                 result = valid_results[0]
                 result['sources'] = [r['source'] for r in valid_results]
                 return result
