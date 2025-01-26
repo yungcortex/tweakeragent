@@ -260,7 +260,7 @@ async def get_token_data(token_id: str) -> Optional[Dict[str, Any]]:
     return None
 
 def format_analysis(data: Dict[str, Any]) -> str:
-    """Format token analysis data with proper terminal line breaks"""
+    """Format token analysis data to match the exact terminal display"""
     try:
         # Get basic price data
         price = data.get('price', 0)
@@ -292,25 +292,19 @@ def format_analysis(data: Dict[str, Any]) -> str:
                     return f"${num:.8f}"
             return str(num)
 
-        # Format with explicit line breaks that will render in terminal
+        # Format exactly like the screenshot
         sources = data.get('sources', [data.get('source', 'unknown')])
+        
+        # Create the exact format from the screenshot with proper spacing
         analysis = (
-            f"📊 CHART ANALYSIS 📊\r\n"
-            f"------------------------\r\n"
-            f"💰Price: {format_number(price)}\r\n\r\n"
-            f"📈 24h Change: {change_24h:+.2f}%\r\n"
-            f"💎 Market Cap: {format_number(mcap)}\r\n\r\n"
-            f"🏊 Liquidity: {format_number(liquidity)}\r\n"
-            f"👥 Holders: {holders}\r\n\r\n"
-            f"📊 Volume 24h: {format_number(volume_24h)}\r\n\r\n"
-            f"------------------------\r\n"
-            f"🔮 Prediction: {prediction}\r\n\r\n"
-            f"------------------------\r\n\r\n"
-            f"📡 Data: {', '.join(sources)}\r\n"
+            f"📊 CHART ANALYSIS 📊 ------------------------ 💰Price: {format_number(price)}\n"
+            f"📈 24h Change: {change_24h:+.2f}% 💎 Market Cap: {format_number(mcap)} 🏊 Liquidity: "
+            f"{format_number(liquidity)} 👥 Holders: {holders} 📊 Volume 24h: {format_number(volume_24h)} --\n"
+            f"------------------------ 🔮 Prediction: {prediction} ------------------------\n"
+            f"📡 Data: {', '.join(sources)}"
         )
         
-        # Replace standard line breaks with carriage return + line feed
-        return analysis.replace('\n', '\r\n')
+        return analysis
 
     except Exception as e:
         logger.error(f"Error formatting analysis: {str(e)}")
@@ -413,8 +407,8 @@ def ask():
             
             if analysis_data:
                 response = format_analysis(analysis_data)
-                # Ensure line breaks are preserved in JSON response
-                return jsonify({"response": response.replace('\n', '\r\n')})
+                # Don't replace newlines, let them be handled by the frontend
+                return jsonify({"response": response})
             else:
                 return jsonify({"response": "token giving me anxiety... can't find it anywhere... like my will to live..."})
 
