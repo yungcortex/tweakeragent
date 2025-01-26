@@ -92,31 +92,24 @@ async def get_binance_data(session: aiohttp.ClientSession, symbol: str) -> Optio
         logger.error(f"Binance API error: {str(e)}")
     return None
 
-async def get_dexscreener_data(session: aiohttp.ClientSession, token_id: str) -> Optional[Dict[str, Any]]:
+async def get_dexscreener_data(session: aiohttp.ClientSession, token_address: str) -> Optional[Dict[str, Any]]:
     """Get data from DexScreener API"""
     try:
-        # Clean the input
-        token_id = token_id.strip()
-        logger.info(f"Querying DexScreener for: {token_id}")
-        
-        # Try search endpoint first
-        search_url = f"{APIS['dexscreener']['url']}/pairs/search?q={token_id}"
-        async with session.get(search_url) as resp:
+        url = f"https://api.dexscreener.com/latest/dex/tokens/{token_address}"
+        async with session.get(url) as resp:
             if resp.status == 200:
                 data = await resp.json()
-                pairs = data.get('pairs', [])
-                if pairs and len(pairs) > 0:
-                    pair = pairs[0]
+                if data.get('pairs') and len(data['pairs']) > 0:
+                    pair = data['pairs'][0]  # Get the most liquid pair
                     return {
                         'price': float(pair.get('priceUsd', 0)),
                         'change_24h': float(pair.get('priceChange', {}).get('h24', 0)),
                         'volume_24h': float(pair.get('volume', {}).get('h24', 0)),
                         'source': 'dexscreener',
                         'extra': {
-                            'liquidity': pair.get('liquidity', {}).get('usd', 0),
-                            'dex': pair.get('dexId', 'unknown'),
-                            'chain': pair.get('chainId', 'unknown'),
-                            'address': pair.get('baseToken', {}).get('address', '')
+                            'marketCap': float(pair.get('fdv', 0)),
+                            'liquidity': float(pair.get('liquidity', {}).get('usd', 0)),
+                            'holders': pair.get('holders', 'N/A')
                         }
                     }
     except Exception as e:
@@ -138,17 +131,13 @@ async def get_coingecko_data(session: aiohttp.ClientSession, token_id: str) -> O
             'dot': 'polkadot',
             'link': 'chainlink',
             'uni': 'uniswap',
-            'matic': 'polygon'
+            'matic': 'matic-network'
         }
         
-        # Clean and standardize token ID
-        token_id = token_id.lower().strip()
-        if token_id in token_mappings:
-            token_id = token_mappings[token_id]
-
-        url = f"{APIS['coingecko']['url']}/simple/price?ids={token_id}&vs_currencies=usd&include_24hr_vol=true&include_24hr_change=true&include_market_cap=true"
-        logger.info(f"Querying CoinGecko: {url}")
+        # Map token ID if needed
+        token_id = token_mappings.get(token_id.lower(), token_id.lower())
         
+        url = f"https://api.coingecko.com/api/v3/simple/price?ids={token_id}&vs_currencies=usd&include_24hr_vol=true&include_24hr_change=true&include_market_cap=true"
         async with session.get(url) as resp:
             if resp.status == 200:
                 data = await resp.json()
@@ -165,7 +154,6 @@ async def get_coingecko_data(session: aiohttp.ClientSession, token_id: str) -> O
                             'holders': 'N/A'  # CoinGecko doesn't provide holder count
                         }
                     }
-
     except Exception as e:
         logger.error(f"CoinGecko API error: {str(e)}")
     return None
@@ -226,79 +214,39 @@ async def get_pumpfun_data(session: aiohttp.ClientSession, token_id: str) -> Opt
         logger.error(f"Pump.fun API error for {token_id}: {str(e)}")
     return None
 
-async def get_token_data(token_id: str) -> Optional[Dict[str, Any]]:
-    """Get token data from multiple sources"""
-    try:
-        async with aiohttp.ClientSession() as session:
-            # Try DexScreener first
-            dex_result = await get_dexscreener_data(session, token_id)
-            if dex_result:
-                return dex_result
-            
-            # Fallback to CoinGecko
-            cg_result = await get_coingecko_data(session, token_id)
-            if cg_result:
-                return cg_result
-                
-    except Exception as e:
-        logger.error(f"Error getting token data: {str(e)}")
-    return None
+def generate_analysis_chart(data: Dict[str, Any]) -> str:
+    """Generate ASCII chart analysis"""
+    price = data['price']
+    change = data['change_24h']
+    volume = data['volume_24h']
+    
+    # Determine market sentiment indicators
+    sentiment = "🚀" if change > 0 else "💀"
+    volume_rating = "High 📈" if volume > 1000000 else "Low 📉"
+    
+    # Generate ASCII chart
+    chart = f"""
+╔══════════════════════════════════════╗
+║         Market Analysis {sentiment}         ║
+╠══════════════════════════════════════╣
+║ Price: ${price:<27.6f} ║
+║ 24h Change: {change:>6.2f}%              ║
+║ 24h Volume: ${volume:,.0f}          ║
+║ Volume Rating: {volume_rating:<20} ║"""
 
-def format_analysis(data: Dict[str, Any]) -> str:
-    """Format token analysis data into a chart display"""
-    try:
-        # Get basic price data
-        price = data.get('price', 0)
-        change_24h = data.get('change_24h', 0)
-        volume_24h = data.get('volume_24h', 0)
-        
-        # Get additional metrics from extra data
-        extra = data.get('extra', {})
-        mcap = extra.get('marketCap', 0)
-        holders = extra.get('holders', 'N/A')
-        liquidity = extra.get('liquidity', 0)
-        
-        # Generate prediction based on 24h change
-        if change_24h > 5:
-            prediction = "bullish af... like my hopium addiction"
-        elif change_24h > 0:
-            prediction = "slightly bullish... like my morning coffee"
-        elif change_24h < -5:
-            prediction = "bearish af... like my life savings"
-        else:
-            prediction = "crabbing... like my trading strategy"
+    # Add extra data if available
+    if 'extra' in data:
+        extra = data['extra']
+        chart += f"""
+║ Market Cap: ${extra['marketCap']:,.0f}        ║
+║ Liquidity: ${extra['liquidity']:,.0f}         ║
+║ Holders: {str(extra['holders']):<26} ║"""
 
-        # Format numbers with commas and limit decimal places
-        def format_number(num):
-            if isinstance(num, (int, float)):
-                if num > 1:
-                    return f"${num:,.2f}"
-                else:
-                    return f"${num:.8f}"
-            return str(num)
-
-        # Format with exact spacing and layout
-        sources = data.get('sources', [data.get('source', 'unknown')])
-        analysis = (
-            f"📊 CHART ANALYSIS 📊\n"
-            f"------------------------\n"
-            f"💰Price: {format_number(price)}\n\n"
-            f"📈 24h Change: {change_24h:+.2f}%\n"
-            f"💎 Market Cap: {format_number(mcap)}\n\n"
-            f"🏊 Liquidity: {format_number(liquidity)}\n"
-            f"👥 Holders: {holders}\n\n"
-            f"📊 Volume 24h: {format_number(volume_24h)}\n\n"
-            f"------------------------\n"
-            f"🔮 Prediction: {prediction}\n\n"
-            f"------------------------\n\n"
-            f"📡 Data: {', '.join(sources)}"
-        )
-        
-        return analysis
-
-    except Exception as e:
-        logger.error(f"Error formatting analysis: {str(e)}")
-        return "chart machine broke... like my portfolio..."
+    chart += f"""
+║ Source: {data['source'].title():<26} ║
+╚══════════════════════════════════════╝
+"""
+    return chart
 
 def get_random_response():
     """Get a random non-analysis response with more variety"""
@@ -324,31 +272,25 @@ def get_random_response():
     ]
     return random.choice(responses)
 
-def extract_token(msg: str) -> Optional[str]:
+def extract_token(message: str) -> Optional[str]:
     """Extract token from message"""
-    try:
-        if not msg:
-            return None
-            
-        msg = msg.lower().strip()
-        logger.info(f"Extracting token from: {msg}")
-        
-        # Handle "price of" format
-        if 'price of' in msg:
-            return msg.split('price of')[1].strip()
-            
-        # Handle "check" format
-        if 'check' in msg:
-            parts = msg.split('check')
-            if len(parts) > 1:
-                return parts[1].strip()
-        
-        # Handle direct token input
-        return msg.strip()
+    # Check if it's a contract address
+    if re.match(r'^0x[a-fA-F0-9]{40}$', message):
+        return message
 
-    except Exception as e:
-        logger.error(f"Error in extract_token: {str(e)}")
-        return None
+    # Common token patterns
+    patterns = [
+        r'(?i)price of (\w+)',  # "price of BTC"
+        r'(?i)check (\w+)',     # "check ETH"
+        r'(?i)how is (\w+)',    # "how is SOL"
+        r'(?i)^(\w+)$',         # "BTC"
+    ]
+    
+    for pattern in patterns:
+        match = re.search(pattern, message)
+        if match:
+            return match.group(1).lower()
+    return None
 
 @bp.route('/')
 def index():
@@ -379,15 +321,16 @@ def ask():
 
     try:
         data = request.json
+        if not data or 'message' not in data:
+            return jsonify({"response": "No message provided! Try something like 'price of BTC'"})
+
         message = data.get('message', '').strip()
         logger.info(f"Received message: {message}")
         
-        # Extract token from message
         token_id = extract_token(message)
         logger.info(f"Extracted token: {token_id}")
         
         if token_id:
-            # Create new event loop for async operations
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
@@ -398,7 +341,7 @@ def ask():
             logger.info(f"Analysis data: {analysis_data}")
             
             if analysis_data:
-                response = format_analysis(analysis_data)
+                response = generate_analysis_chart(analysis_data)
                 return jsonify({"response": response})
             else:
                 return jsonify({"response": "token giving me anxiety... can't find it anywhere... like my will to live..."})
@@ -417,6 +360,22 @@ def after_request(response):
     response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
     response.headers.add('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
     return response
+
+async def get_token_data(token_id: str) -> Optional[Dict[str, Any]]:
+    """Get token data from APIs"""
+    async with aiohttp.ClientSession() as session:
+        # Try DexScreener first if it's a contract address
+        if token_id.startswith('0x'):
+            data = await get_dexscreener_data(session, token_id)
+            if data:
+                return data
+        
+        # Try CoinGecko for known tokens
+        data = await get_coingecko_data(session, token_id)
+        if data:
+            return data
+            
+    return None
 
 if __name__ == '__main__':
     app.run(debug=True)
