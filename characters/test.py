@@ -93,11 +93,10 @@ async def get_binance_data(session: aiohttp.ClientSession, symbol: str) -> Optio
     return None
 
 async def get_dexscreener_data(session: aiohttp.ClientSession, token_id: str) -> Optional[Dict[str, Any]]:
-    """Get data from DexScreener"""
+    """Get data from DexScreener with additional token info"""
     try:
         # Remove any $ prefix and spaces
         token_id = token_id.replace('$', '').strip()
-        print(f"Querying DexScreener for token: {token_id}")  # Debug print
         
         # Try multiple endpoints for DexScreener
         urls = [
@@ -107,13 +106,10 @@ async def get_dexscreener_data(session: aiohttp.ClientSession, token_id: str) ->
         ]
         
         for url in urls:
-            print(f"Trying DexScreener URL: {url}")  # Debug print
             try:
                 async with session.get(url) as resp:
                     if resp.status == 200:
                         data = await resp.json()
-                        print(f"DexScreener response: {data}")  # Debug print
-                        
                         pairs = data.get('pairs', [])
                         if pairs and len(pairs) > 0:
                             pair = pairs[0]
@@ -125,15 +121,15 @@ async def get_dexscreener_data(session: aiohttp.ClientSession, token_id: str) ->
                                 'extra': {
                                     'liquidity': pair.get('liquidity', {}).get('usd', 0),
                                     'dex': pair.get('dexId', 'unknown'),
-                                    'chain': pair.get('chainId', 'unknown')
+                                    'chain': pair.get('chainId', 'unknown'),
+                                    'address': pair.get('baseToken', {}).get('address', ''),
                                 }
                             }
             except Exception as e:
-                print(f"Error with DexScreener URL {url}: {str(e)}")  # Debug print
+                logger.error(f"Error with URL {url}: {str(e)}")
                 continue
                 
     except Exception as e:
-        print(f"DexScreener API error for {token_id}: {str(e)}")  # Debug print
         logger.error(f"DexScreener API error for {token_id}: {str(e)}")
     return None
 
@@ -264,7 +260,7 @@ async def get_token_data(token_id: str) -> Optional[Dict[str, Any]]:
     return None
 
 def format_analysis(data: Dict[str, Any]) -> str:
-    """Format token analysis data into a chart display with specific line breaks"""
+    """Format token analysis data into a chart display with DexScreener chart link"""
     try:
         # Get basic price data
         price = data.get('price', 0)
@@ -276,6 +272,10 @@ def format_analysis(data: Dict[str, Any]) -> str:
         mcap = extra.get('marketCap', 0)
         holders = extra.get('holders', 'N/A')
         liquidity = extra.get('liquidity', 0)
+        
+        # Get token address and chain for DexScreener link
+        token_address = extra.get('address', '')
+        chain = extra.get('chain', 'solana').lower()
         
         # Generate prediction based on 24h change
         if change_24h > 5:
@@ -312,7 +312,12 @@ def format_analysis(data: Dict[str, Any]) -> str:
             f"------------------------\n\n"
             f"📡 Data: {', '.join(sources)}\n"
         )
-        
+
+        # Add DexScreener chart link if we have a token address
+        if token_address:
+            dex_url = f"https://dexscreener.com/{chain}/{token_address}"
+            analysis += f"\n📈 Live Chart: {dex_url}\n"
+            
         return analysis
 
     except Exception as e:
