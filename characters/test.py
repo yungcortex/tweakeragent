@@ -263,78 +263,64 @@ async def get_token_data(token_id: str) -> Optional[Dict[str, Any]]:
         logger.exception(e)
     return None
 
-def format_analysis(analysis_data):
-    """Format market analysis according to character style"""
+def format_analysis(data: Dict[str, Any]) -> str:
+    """Format token analysis data into a chart-like display with predictions"""
     try:
-        # Extract basic data
-        price = analysis_data.get('price', 0)
-        change = analysis_data.get('change_24h', 0)
-        volume = analysis_data.get('volume_24h', 0)
-        sources = analysis_data.get('sources', [analysis_data.get('source', 'unknown')])
-        extra = analysis_data.get('extra', {})
+        # Get basic price data
+        price = data.get('price', 0)
+        change_24h = data.get('change_24h', 0)
+        volume_24h = data.get('volume_24h', 0)
+        
+        # Get additional metrics from extra data
+        extra = data.get('extra', {})
+        mcap = extra.get('marketCap', 0)
+        holders = extra.get('holders', 'N/A')
+        liquidity = extra.get('liquidity', 0)
+        
+        # Generate a simple prediction based on 24h change
+        if change_24h > 5:
+            prediction = "bullish af... like my hopium addiction"
+        elif change_24h > 0:
+            prediction = "slightly bullish... like my morning coffee"
+        elif change_24h < -5:
+            prediction = "bearish af... like my life savings"
+        else:
+            prediction = "crabbing... like my trading strategy"
 
-        # Enhanced random phrases
-        manic_states = [
-            "manic episode", "psychological breakdown", "existential crisis",
-            "therapy session", "mental relapse", "dissociative state",
-            "panic attack", "dopamine rush", "trading ptsd", "chart anxiety",
-            "market trauma", "hopium overdose"
+        # Format numbers with commas and limit decimal places
+        def format_number(num):
+            if isinstance(num, (int, float)):
+                if num > 1:
+                    return f"${num:,.2f}"
+                else:
+                    return f"${num:.8f}"
+            return str(num)
+
+        # Create chart-like display
+        analysis = [
+            "📊 CHART ANALYSIS 📊",
+            "------------------------",
+            f"💰 Price: {format_number(price)}",
+            f"📈 24h Change: {change_24h:+.2f}%",
+            f"💎 Market Cap: {format_number(mcap)}",
+            f"🏊 Liquidity: {format_number(liquidity)}",
+            f"👥 Holders: {holders}",
+            f"📊 Volume 24h: {format_number(volume_24h)}",
+            "------------------------",
+            f"🔮 Prediction: {prediction}",
+            "------------------------"
         ]
 
-        addiction_comparisons = [
-            "caffeine addiction", "doomscrolling habit", "trading addiction",
-            "chart obsession", "hopium dependency", "fomo syndrome",
-            "leverage addiction", "rug pull ptsd", "degen gambling",
-            "yield farming obsession", "airdrop addiction"
-        ]
-
-        relationship_metaphors = [
-            "my relationships", "my commitment issues", "my trust issues",
-            "my emotional stability", "my social life", "my portfolio",
-            "my trading history", "my liquidation history", "my leverage habits",
-            "my wallet balance", "my trading psychology"
-        ]
-
-        market_conditions = [
-            "paper hands crying", "diamond hands forming", "bears in therapy",
-            "bulls on steroids", "whales having mood swings", "paper hands folding",
-            "market makers in rehab", "liquidity pools evaporating"
-        ]
-
-        # Create dynamic response with more variety
-        state = random.choice(manic_states)
-        addiction = random.choice(addiction_comparisons)
-        relationship = random.choice(relationship_metaphors)
-        condition = random.choice(market_conditions)
-
-        # Format with random variations and more technical details
-        response_parts = [
-            f"having another {state}... {'up' if change > 0 else 'down'} {abs(change):.2f}% like my serotonin levels",
-            f"volume at ${volume:,.2f} - more unstable than my {addiction}",
-            f"price ${price:.8f} giving me flashbacks",
-            f"market sentiment more volatile than {relationship}",
-            f"{condition} while {sources[0]} shows signs of {random.choice(manic_states)}"
-        ]
-
-        # Add extra insights if available
-        if extra.get('liquidity'):
-            response_parts.append(f"liquidity pool deeper than my emotional issues: ${extra['liquidity']:,.2f}")
-        if extra.get('dex'):
-            response_parts.append(f"trading on {extra['dex']} like my life depends on it")
-
-        # Add multi-source commentary
-        if len(sources) > 1:
-            response_parts.append(f"cross-referencing {', '.join(sources)} like my multiple personalities")
-
-        # Randomize order and select 3-4 parts
-        random.shuffle(response_parts)
-        selected_parts = response_parts[:random.randint(3, 4)]
-
-        return " ... ".join(selected_parts).lower()
+        # Add source information
+        sources = data.get('sources', [data.get('source', 'unknown')])
+        analysis.append(f"📡 Data: {', '.join(sources)}")
+        
+        # Join with newlines
+        return "\n".join(analysis)
 
     except Exception as e:
         logger.error(f"Error formatting analysis: {str(e)}")
-        return "having a breakdown... give me a minute..."
+        return "chart machine broke... like my portfolio..."
 
 def get_random_response():
     """Get a random non-analysis response with more variety"""
