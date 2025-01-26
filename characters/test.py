@@ -119,25 +119,48 @@ async def get_dexscreener_data(session: aiohttp.ClientSession, token_id: str) ->
     return None
 
 async def get_coingecko_data(session: aiohttp.ClientSession, token_id: str) -> Optional[Dict[str, Any]]:
-    """Get data from CoinGecko"""
+    """Get data from CoinGecko API"""
     try:
-        coin_id = TOKEN_MAPPINGS.get(token_id.lower(), {}).get('coingecko', token_id.lower())
-        async with session.get(
-            f"{APIS['coingecko']['url']}/simple/price?ids={coin_id}&vs_currencies=usd&include_24hr_vol=true&include_24hr_change=true&include_market_cap=true"
-        ) as resp:
+        # Common token mappings
+        token_mappings = {
+            'btc': 'bitcoin',
+            'eth': 'ethereum',
+            'sol': 'solana',
+            'doge': 'dogecoin',
+            'bnb': 'binancecoin',
+            'xrp': 'ripple',
+            'ada': 'cardano',
+            'dot': 'polkadot',
+            'link': 'chainlink',
+            'uni': 'uniswap',
+            'matic': 'polygon'
+        }
+        
+        # Clean and standardize token ID
+        token_id = token_id.lower().strip()
+        if token_id in token_mappings:
+            token_id = token_mappings[token_id]
+
+        url = f"{APIS['coingecko']['url']}/simple/price?ids={token_id}&vs_currencies=usd&include_24hr_vol=true&include_24hr_change=true&include_market_cap=true"
+        logger.info(f"Querying CoinGecko: {url}")
+        
+        async with session.get(url) as resp:
             if resp.status == 200:
                 data = await resp.json()
-                if data.get(coin_id):
-                    token_data = data[coin_id]
+                if data and token_id in data:
+                    token_data = data[token_id]
                     return {
-                        'price': token_data['usd'],
-                        'change_24h': token_data['usd_24h_change'],
-                        'volume_24h': token_data['usd_24h_vol'],
+                        'price': float(token_data.get('usd', 0)),
+                        'change_24h': float(token_data.get('usd_24h_change', 0)),
+                        'volume_24h': float(token_data.get('usd_24h_vol', 0)),
                         'source': 'coingecko',
                         'extra': {
-                            'marketCap': token_data.get('usd_market_cap', 0)
+                            'marketCap': float(token_data.get('usd_market_cap', 0)),
+                            'liquidity': 0,  # CoinGecko doesn't provide liquidity
+                            'holders': 'N/A'  # CoinGecko doesn't provide holder count
                         }
                     }
+
     except Exception as e:
         logger.error(f"CoinGecko API error: {str(e)}")
     return None
