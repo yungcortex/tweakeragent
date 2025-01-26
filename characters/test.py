@@ -226,14 +226,16 @@ def generate_analysis_chart(data: Dict[str, Any]) -> str:
     sentiment = "🚀" if change > 0 else "💀"
     volume_rating = "High 📈" if volume > 1000000 else "Low 📉"
     
-    # Use <br> tags for line breaks
+    # Use Unicode Line Feed (LF) character
+    LF = '\u000A'  # This is a special line feed character
+    
     return (
-        f"║ Market Analysis {sentiment} ║<br>"
-        f"║ Price: ${price:<.6f} ║<br>"
-        f"║ 24h Change: {change:.2f}% ║<br>"
-        f"║ 24h Volume: ${volume:,.0f} ║<br>"
-        f"║ Volume Rating: {volume_rating} ║<br>"
-        f"║ Source: {data['source'].title()} ║<br>"
+        f"║ Market Analysis {sentiment} ║{LF}"
+        f"║ Price: ${price:<.6f} ║{LF}"
+        f"║ 24h Change: {change:.2f}% ║{LF}"
+        f"║ 24h Volume: ${volume:,.0f} ║{LF}"
+        f"║ Volume Rating: {volume_rating} ║{LF}"
+        f"║ Source: {data['source'].title()} ║{LF}"
         f"║ Market Cap: ${market_cap:,.0f} ║"
     )
 
