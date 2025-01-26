@@ -1,16 +1,10 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask
 from characters.test import bp as character_blueprint
-import logging
+import os
 
-# Set up logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-# Create the Flask app
 app = Flask(__name__)
-
-# Register the blueprint
 app.register_blueprint(character_blueprint)
 
 if __name__ == '__main__':
-    app.run(debug=True) 
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port) 
