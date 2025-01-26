@@ -297,10 +297,17 @@ def format_analysis(data: Dict[str, Any]) -> str:
         
         # Create the exact format from the screenshot with proper spacing
         analysis = (
-            f"📊 CHART ANALYSIS 📊 ------------------------ 💰Price: {format_number(price)}\n"
-            f"📈 24h Change: {change_24h:+.2f}% 💎 Market Cap: {format_number(mcap)} 🏊 Liquidity: "
-            f"{format_number(liquidity)} 👥 Holders: {holders} 📊 Volume 24h: {format_number(volume_24h)} --\n"
-            f"------------------------ 🔮 Prediction: {prediction} ------------------------\n"
+            f"📊 CHART ANALYSIS 📊\n"
+            f"------------------------\n"
+            f"💰Price: {format_number(price)}\n"
+            f"📈 24h Change: {change_24h:+.2f}%\n"
+            f"💎 Market Cap: {format_number(mcap)}\n"
+            f"🏊 Liquidity: {format_number(liquidity)}\n"
+            f"👥 Holders: {holders} \n"
+            f"📊 Volume 24h: {format_number(volume_24h)} --\n"
+            f"------------------------ \n" 
+            f"🔮 Prediction: {prediction} \n"
+            f"------------------------\n"
             f"📡 Data: {', '.join(sources)}"
         )
         
