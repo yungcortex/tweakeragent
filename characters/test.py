@@ -88,43 +88,14 @@ async def get_binance_data(session: aiohttp.ClientSession, symbol: str) -> Optio
     return None
 
 async def get_dexscreener_data(session: aiohttp.ClientSession, token_id: str) -> Optional[Dict[str, Any]]:
-    """Get data from DexScreener API with better contract handling"""
+    """Get data from DexScreener API"""
     try:
         # Clean the input
         token_id = token_id.strip()
         logger.info(f"Querying DexScreener for: {token_id}")
         
-        # If it looks like a contract address (long alphanumeric string)
-        if len(token_id) > 30:
-            # Try multiple chains for contract address
-            chains = ['solana', 'ethereum', 'bsc', 'arbitrum', 'polygon']
-            for chain in chains:
-                url = f"{APIS['dexscreener']['url']}/pairs/{chain}/{token_id}"
-                logger.info(f"Trying chain {chain}: {url}")
-                
-                async with session.get(url) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        pairs = data.get('pairs', [])
-                        if pairs and len(pairs) > 0:
-                            pair = pairs[0]
-                            return {
-                                'price': float(pair.get('priceUsd', 0)),
-                                'change_24h': float(pair.get('priceChange', {}).get('h24', 0)),
-                                'volume_24h': float(pair.get('volume', {}).get('h24', 0)),
-                                'source': 'dexscreener',
-                                'extra': {
-                                    'liquidity': pair.get('liquidity', {}).get('usd', 0),
-                                    'dex': pair.get('dexId', 'unknown'),
-                                    'chain': chain,
-                                    'address': token_id
-                                }
-                            }
-        
-        # If not found by direct contract, try search
+        # Try search endpoint first
         search_url = f"{APIS['dexscreener']['url']}/pairs/search?q={token_id}"
-        logger.info(f"Trying search: {search_url}")
-        
         async with session.get(search_url) as resp:
             if resp.status == 200:
                 data = await resp.json()
@@ -143,10 +114,8 @@ async def get_dexscreener_data(session: aiohttp.ClientSession, token_id: str) ->
                             'address': pair.get('baseToken', {}).get('address', '')
                         }
                     }
-
     except Exception as e:
         logger.error(f"DexScreener API error: {str(e)}")
-        logger.exception(e)
     return None
 
 async def get_coingecko_data(session: aiohttp.ClientSession, token_id: str) -> Optional[Dict[str, Any]]:
@@ -248,7 +217,7 @@ async def get_token_data(token_id: str) -> Optional[Dict[str, Any]]:
     return None
 
 def format_analysis(data: Dict[str, Any]) -> str:
-    """Format token analysis data to match the exact terminal display"""
+    """Format token analysis data into a chart display"""
     try:
         # Get basic price data
         price = data.get('price', 0)
@@ -280,16 +249,21 @@ def format_analysis(data: Dict[str, Any]) -> str:
                     return f"${num:.8f}"
             return str(num)
 
-        # Format exactly like the screenshot
+        # Format with exact spacing and layout
         sources = data.get('sources', [data.get('source', 'unknown')])
-        
-        # Format with HTML-style line breaks that the frontend will respect
         analysis = (
-            f"📊 CHART ANALYSIS 📊 ------------------------ 💰Price: {format_number(price)} "
-            f"<br>📈 24h Change: {change_24h:+.2f}% 💎 Market Cap: {format_number(mcap)} 🏊 Liquidity: "
-            f"{format_number(liquidity)} 👥 Holders: {holders} 📊 Volume 24h: {format_number(volume_24h)} --"
-            f"<br>------------------------ 🔮 Prediction: {prediction}"
-            f"<br>------------------------ 📡 Data: {', '.join(sources)}"
+            f"📊 CHART ANALYSIS 📊\n"
+            f"------------------------\n"
+            f"💰Price: {format_number(price)}\n\n"
+            f"📈 24h Change: {change_24h:+.2f}%\n"
+            f"💎 Market Cap: {format_number(mcap)}\n\n"
+            f"🏊 Liquidity: {format_number(liquidity)}\n"
+            f"👥 Holders: {holders}\n\n"
+            f"📊 Volume 24h: {format_number(volume_24h)}\n\n"
+            f"------------------------\n"
+            f"🔮 Prediction: {prediction}\n\n"
+            f"------------------------\n\n"
+            f"📡 Data: {', '.join(sources)}"
         )
         
         return analysis
@@ -323,7 +297,7 @@ def get_random_response():
     return random.choice(responses)
 
 def extract_token(msg: str) -> Optional[str]:
-    """Extract token with better contract handling"""
+    """Extract token from message"""
     try:
         if not msg:
             return None
@@ -331,32 +305,21 @@ def extract_token(msg: str) -> Optional[str]:
         msg = msg.lower().strip()
         logger.info(f"Extracting token from: {msg}")
         
-        # Handle /analyze command
-        if msg.startswith('/analyze'):
-            parts = msg.split()
-            if len(parts) > 1:
-                return parts[1]
-        
-        # Handle contract addresses
-        contract_match = re.search(r'([a-zA-Z0-9]{30,})', msg)
-        if contract_match:
-            return contract_match.group(1)
-        
         # Handle "price of" format
         if 'price of' in msg:
             return msg.split('price of')[1].strip()
+            
+        # Handle "check" format
+        if 'check' in msg:
+            parts = msg.split('check')
+            if len(parts) > 1:
+                return parts[1].strip()
         
-        # Handle other formats
-        words = msg.split()
-        for word in words:
-            if len(word) > 30 and word.isalnum():
-                return word
-                
-        return None
+        # Handle direct token input
+        return msg.strip()
 
     except Exception as e:
         logger.error(f"Error in extract_token: {str(e)}")
-        logger.exception(e)
         return None
 
 @bp.route('/')
