@@ -264,7 +264,7 @@ async def get_token_data(token_id: str) -> Optional[Dict[str, Any]]:
     return None
 
 def format_analysis(data: Dict[str, Any]) -> str:
-    """Format token analysis data into a chart-like display with predictions"""
+    """Format token analysis data into a single-line chart display"""
     try:
         # Get basic price data
         price = data.get('price', 0)
@@ -277,7 +277,7 @@ def format_analysis(data: Dict[str, Any]) -> str:
         holders = extra.get('holders', 'N/A')
         liquidity = extra.get('liquidity', 0)
         
-        # Generate a simple prediction based on 24h change
+        # Generate prediction based on 24h change
         if change_24h > 5:
             prediction = "bullish af... like my hopium addiction"
         elif change_24h > 0:
@@ -296,27 +296,16 @@ def format_analysis(data: Dict[str, Any]) -> str:
                     return f"${num:.8f}"
             return str(num)
 
-        # Create chart-like display
-        analysis = [
-            "📊 CHART ANALYSIS 📊",
-            "------------------------",
-            f"💰 Price: {format_number(price)}",
-            f"📈 24h Change: {change_24h:+.2f}%",
-            f"💎 Market Cap: {format_number(mcap)}",
-            f"🏊 Liquidity: {format_number(liquidity)}",
-            f"👥 Holders: {holders}",
-            f"📊 Volume 24h: {format_number(volume_24h)}",
-            "------------------------",
-            f"🔮 Prediction: {prediction}",
-            "------------------------"
-        ]
-
-        # Add source information
-        sources = data.get('sources', [data.get('source', 'unknown')])
-        analysis.append(f"📡 Data: {', '.join(sources)}")
+        # Create single-line analysis with emojis and proper spacing
+        analysis = (
+            f"📊 CHART ANALYSIS 📊 ------------------------ 💰 Price: {format_number(price)} "
+            f"📈 24h Change: {change_24h:+.2f}% 💎 Market Cap: {format_number(mcap)} 🏊 Liquidity: "
+            f"{format_number(liquidity)} 👥 Holders: {holders} 📊 Volume 24h: {format_number(volume_24h)} -- "
+            f"------------------------ 🔮 Prediction: {prediction} ------------------------ "
+            f"📡 Data: {', '.join(data.get('sources', [data.get('source', 'unknown')]))}"
+        )
         
-        # Join with newlines
-        return "\n".join(analysis)
+        return analysis
 
     except Exception as e:
         logger.error(f"Error formatting analysis: {str(e)}")
