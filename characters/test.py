@@ -226,27 +226,20 @@ def generate_analysis_chart(data: Dict[str, Any]) -> str:
     sentiment = "🚀" if change > 0 else "💀"
     volume_rating = "High 📈" if volume > 1000000 else "Low 📉"
     
-    # Generate ASCII chart with stronger line breaks
-    lines = [
-        f"║ Market Analysis {sentiment} ║",
-        f"║ Price: ${price:<.6f} ║",
-        f"║ 24h Change: {change:.2f}% ║",
-        f"║ 24h Volume: ${volume:,.0f} ║",
-        f"║ Volume Rating: {volume_rating} ║",
-        f"║ Source: {data['source'].title()} ║",
-        f"║ Market Cap: ${market_cap:,.0f} ║"
-    ]
+    # First line
+    line1 = f"║ Market Analysis {sentiment} ║ ║ Price: ${price:<.6f} ║"
+    
+    # Second line
+    line2 = f"║ 24h Change: {change:.2f}% ║ ║ 24h Volume: ${volume:,.0f} ║"
+    
+    # Third line
+    line3 = f"║ Volume Rating: {volume_rating} ║ ║ Source: {data['source'].title()} ║"
+    
+    # Fourth line
+    line4 = f"║ Market Cap: ${market_cap:,.0f} ║"
 
-    # Add extra data if available
-    if 'extra' in data:
-        extra = data['extra']
-        if extra.get('liquidity'):
-            lines.append(f"║ Liquidity: ${extra['liquidity']:,.0f} ║")
-        if extra.get('holders'):
-            lines.append(f"║ Holders: {str(extra['holders'])} ║")
-
-    # Join with explicit line breaks
-    return "\r\n".join(lines)
+    # Combine lines with explicit line breaks and double spaces
+    return f"{line1}\n\n{line2}\n\n{line3}\n\n{line4}"
 
 def get_random_response():
     """Get a random non-analysis response with more variety"""
