@@ -6,13 +6,11 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Create the Flask app
 app = Flask(__name__)
 
-# Register the character blueprint
+# Register the blueprint
 app.register_blueprint(character_blueprint)
-
-# This is important for Gunicorn to find the app
-application = app
 
 if __name__ == '__main__':
     app.run(debug=True) 
