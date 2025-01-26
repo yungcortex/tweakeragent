@@ -295,20 +295,13 @@ def format_analysis(data: Dict[str, Any]) -> str:
         # Format exactly like the screenshot
         sources = data.get('sources', [data.get('source', 'unknown')])
         
-        # Create the exact format from the screenshot with proper spacing
+        # Format with HTML-style line breaks that the frontend will respect
         analysis = (
-            f"📊 CHART ANALYSIS 📊\n"
-            f"------------------------\n"
-            f"💰Price: {format_number(price)}\n"
-            f"📈 24h Change: {change_24h:+.2f}%\n"
-            f"💎 Market Cap: {format_number(mcap)}\n"
-            f"🏊 Liquidity: {format_number(liquidity)}\n"
-            f"👥 Holders: {holders} \n"
-            f"📊 Volume 24h: {format_number(volume_24h)} --\n"
-            f"------------------------ \n" 
-            f"🔮 Prediction: {prediction} \n"
-            f"------------------------\n"
-            f"📡 Data: {', '.join(sources)}"
+            f"📊 CHART ANALYSIS 📊 ------------------------ 💰Price: {format_number(price)} "
+            f"<br>📈 24h Change: {change_24h:+.2f}% 💎 Market Cap: {format_number(mcap)} 🏊 Liquidity: "
+            f"{format_number(liquidity)} 👥 Holders: {holders} 📊 Volume 24h: {format_number(volume_24h)} --"
+            f"<br>------------------------ 🔮 Prediction: {prediction}"
+            f"<br>------------------------ 📡 Data: {', '.join(sources)}"
         )
         
         return analysis
@@ -414,7 +407,8 @@ def ask():
             
             if analysis_data:
                 response = format_analysis(analysis_data)
-                # Don't replace newlines, let them be handled by the frontend
+                # Convert <br> tags to actual newlines for the frontend
+                response = response.replace('<br>', '\n')
                 return jsonify({"response": response})
             else:
                 return jsonify({"response": "token giving me anxiety... can't find it anywhere... like my will to live..."})
