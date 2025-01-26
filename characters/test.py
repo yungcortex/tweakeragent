@@ -220,35 +220,30 @@ def generate_analysis_chart(data: Dict[str, Any]) -> str:
     price = data['price']
     change = data['change_24h']
     volume = data['volume_24h']
+    market_cap = data.get('market_cap', 0)
     
     # Determine market sentiment indicators
     sentiment = "🚀" if change > 0 else "💀"
     volume_rating = "High 📈" if volume > 1000000 else "Low 📉"
     
-    # Generate ASCII chart with your style and line breaks
-    chart = f"""║ Market Analysis {sentiment} ║
-
-║ Price: ${price:<.6f} ║
-
-║ 24h Change: {change:.2f}% ║
-
-║ 24h Volume: ${volume:,.0f} ║
-
-║ Volume Rating: {volume_rating} ║
-
-║ Source: {data['source'].title()} ║"""
-
-    # Add market cap if available
-    if 'market_cap' in data:
-        chart += f"\n\n║ Market Cap: ${data['market_cap']:,.0f} ║"
+    # Generate ASCII chart with explicit line breaks
+    chart = (
+        f"║ Market Analysis {sentiment} ║\n"
+        f"║ Price: ${price:<.6f} ║\n"
+        f"║ 24h Change: {change:.2f}% ║\n"
+        f"║ 24h Volume: ${volume:,.0f} ║\n"
+        f"║ Volume Rating: {volume_rating} ║\n"
+        f"║ Source: {data['source'].title()} ║\n"
+        f"║ Market Cap: ${market_cap:,.0f} ║"
+    )
 
     # Add extra data if available
     if 'extra' in data:
         extra = data['extra']
         if extra.get('liquidity'):
-            chart += f"\n\n║ Liquidity: ${extra['liquidity']:,.0f} ║"
+            chart += f"\n║ Liquidity: ${extra['liquidity']:,.0f} ║"
         if extra.get('holders'):
-            chart += f"\n\n║ Holders: {str(extra['holders'])} ║"
+            chart += f"\n║ Holders: {str(extra['holders'])} ║"
 
     return chart
 
