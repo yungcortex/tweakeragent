@@ -1,8 +1,10 @@
-flask
+flask==3.0.0
 gunicorn
-requests
-python-dotenv
-aiohttp
+requests==2.31.0
+python-dotenv==1.0.0
+aiohttp==3.9.1
 numpy
 pandas
 web3
+asyncio==3.4.3
+regex==2023.10.3
