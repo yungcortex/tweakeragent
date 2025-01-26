@@ -18,8 +18,10 @@ import re
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Create Flask app directly in test.py
-app = Flask(__name__)
+# Create Flask app with the correct template folder path
+app = Flask(__name__, 
+           template_folder='../templates',
+           static_folder='../static')
 
 # Create blueprint instead of Flask app
 bp = Blueprint('character', __name__)
@@ -354,10 +356,15 @@ def index():
 
 @app.route('/')
 def home():
-    return jsonify({
-        "status": "online",
-        "message": "Tweaker Agent API is running! Send POST requests to /ask"
-    })
+    try:
+        return render_template('index.html')
+    except Exception as e:
+        logger.error(f"Template error: {str(e)}")
+        # Fallback JSON response if template fails
+        return jsonify({
+            "status": "online",
+            "message": "Tweaker Agent API is running! Send POST requests to /ask"
+        })
 
 @app.route('/ask', methods=['POST', 'OPTIONS'])
 def ask():
