@@ -160,16 +160,20 @@ async def get_coingecko_data(session: aiohttp.ClientSession, token_id: str) -> O
     try:
         coin_id = TOKEN_MAPPINGS.get(token_id.lower(), {}).get('coingecko', token_id.lower())
         async with session.get(
-            f"{APIS['coingecko']['url']}/simple/price?ids={coin_id}&vs_currencies=usd&include_24hr_vol=true&include_24hr_change=true"
+            f"{APIS['coingecko']['url']}/simple/price?ids={coin_id}&vs_currencies=usd&include_24hr_vol=true&include_24hr_change=true&include_market_cap=true"
         ) as resp:
             if resp.status == 200:
                 data = await resp.json()
                 if data.get(coin_id):
+                    token_data = data[coin_id]
                     return {
-                        'price': data[coin_id]['usd'],
-                        'change_24h': data[coin_id]['usd_24h_change'],
-                        'volume_24h': data[coin_id]['usd_24h_vol'],
-                        'source': 'coingecko'
+                        'price': token_data['usd'],
+                        'change_24h': token_data['usd_24h_change'],
+                        'volume_24h': token_data['usd_24h_vol'],
+                        'source': 'coingecko',
+                        'extra': {
+                            'marketCap': token_data.get('usd_market_cap', 0)
+                        }
                     }
     except Exception as e:
         logger.error(f"CoinGecko API error: {str(e)}")
@@ -232,36 +236,21 @@ async def get_pumpfun_data(session: aiohttp.ClientSession, token_id: str) -> Opt
     return None
 
 async def get_token_data(token_id: str) -> Optional[Dict[str, Any]]:
-    """Get token data prioritizing DexScreener"""
+    """Get token data from multiple sources"""
     try:
-        token_id = token_id.strip().replace('$', '').lower()
-        logger.info(f"Searching for token: {token_id}")
-        
         async with aiohttp.ClientSession() as session:
             # Try DexScreener first
             dex_result = await get_dexscreener_data(session, token_id)
             if dex_result:
-                dex_result['sources'] = ['dexscreener']
                 return dex_result
             
-            # Fallback to other sources if DexScreener fails
-            tasks = [
-                get_coingecko_data(session, token_id),
-                get_binance_data(session, token_id),
-                get_defillama_data(session, token_id)
-            ]
-            
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-            valid_results = [r for r in results if isinstance(r, dict)]
-            
-            if valid_results:
-                result = valid_results[0]
-                result['sources'] = [r['source'] for r in valid_results]
-                return result
-
+            # Fallback to CoinGecko
+            cg_result = await get_coingecko_data(session, token_id)
+            if cg_result:
+                return cg_result
+                
     except Exception as e:
-        logger.error(f"Error in get_token_data: {str(e)}")
-        logger.exception(e)
+        logger.error(f"Error getting token data: {str(e)}")
     return None
 
 def format_analysis(data: Dict[str, Any]) -> str:
@@ -382,7 +371,7 @@ def index():
 
 @app.route('/ask', methods=['POST'])
 def ask():
-    """Handle requests with better error handling"""
+    """Handle incoming requests"""
     try:
         data = request.json
         message = data.get('message', '').strip()
@@ -393,11 +382,13 @@ def ask():
         logger.info(f"Extracted token: {token_id}")
         
         if token_id:
-            # Get token data asynchronously
+            # Create new event loop for async operations
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            analysis_data = loop.run_until_complete(get_token_data(token_id))
-            loop.close()
+            try:
+                analysis_data = loop.run_until_complete(get_token_data(token_id))
+            finally:
+                loop.close()
             
             logger.info(f"Analysis data: {analysis_data}")
             
