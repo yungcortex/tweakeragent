@@ -274,22 +274,46 @@ def get_random_response():
 
 def extract_token(message: str) -> Optional[str]:
     """Extract token from message"""
-    # Check if it's a contract address
-    if re.match(r'^0x[a-fA-F0-9]{40}$', message):
+    # Remove any special characters and extra spaces
+    message = re.sub(r'[^\w\s]', '', message.lower()).strip()
+    
+    # Direct token mentions
+    if message in ['btc', 'eth', 'sol', 'bnb', 'xrp', 'ada', 'doge']:
         return message
+
+    # Check if it's a contract address
+    if '0x' in message:
+        contract = re.search(r'0x[a-fA-F0-9]{40}', message)
+        if contract:
+            return contract.group(0)
 
     # Common token patterns
     patterns = [
-        r'(?i)price of (\w+)',  # "price of BTC"
-        r'(?i)check (\w+)',     # "check ETH"
-        r'(?i)how is (\w+)',    # "how is SOL"
-        r'(?i)^(\w+)$',         # "BTC"
+        r'(?i)price of (\w+)',     # "price of BTC"
+        r'(?i)check (\w+)',        # "check ETH"
+        r'(?i)how is (\w+)',       # "how is SOL"
+        r'(?i)analyze (\w+)',      # "analyze BTC"
+        r'(?i)what is (\w+)',      # "what is ETH"
+        r'(?i)^(\w+)$',           # "BTC"
+        r'(?i)(\w+) price',       # "BTC price"
     ]
     
     for pattern in patterns:
         match = re.search(pattern, message)
         if match:
-            return match.group(1).lower()
+            token = match.group(1).lower()
+            # Map common variations
+            token_map = {
+                'bitcoin': 'btc',
+                'ethereum': 'eth',
+                'solana': 'sol',
+                'cardano': 'ada',
+                'dogecoin': 'doge',
+                'binance': 'bnb',
+                'ripple': 'xrp'
+            }
+            return token_map.get(token, token)
+            
     return None
 
 @bp.route('/')
