@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template
+from flask import Blueprint, request, jsonify, render_template
 import os
 import json
 import time
@@ -14,21 +14,15 @@ from web3 import Web3
 from typing import Dict, Any, Optional
 import re
 
-# Setup logging with more detail
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+# Create blueprint instead of Flask app
+bp = Blueprint('character', __name__)
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Get the absolute path to the project root directory
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-# Initialize Flask with the correct paths
-app = Flask(__name__,
-           static_url_path='/static',
-           static_folder=os.path.join(project_root, 'static'),
-           template_folder=os.path.join(project_root, 'templates'))
 
 # Load character configuration
 character_path = os.path.join(os.path.dirname(__file__), 'tweaker.character.json')
@@ -365,11 +359,11 @@ def extract_token(msg: str) -> Optional[str]:
         logger.exception(e)
         return None
 
-@app.route('/')
+@bp.route('/')
 def index():
     return render_template('index.html')
 
-@app.route('/ask', methods=['POST'])
+@bp.route('/ask', methods=['POST'])
 def ask():
     """Handle incoming requests"""
     try:
@@ -404,7 +398,3 @@ def ask():
         logger.error(f"Error processing request: {str(e)}")
         logger.exception(e)
         return jsonify({"response": "having a mental breakdown... try again later... like my trading career..."})
-
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)
