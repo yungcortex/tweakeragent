@@ -94,20 +94,46 @@ async def get_binance_data(session: aiohttp.ClientSession, symbol: str) -> Optio
     return None
 
 async def get_dexscreener_data(session: aiohttp.ClientSession, token_id: str) -> Optional[Dict[str, Any]]:
-    """Get data from DexScreener API"""
+    """Get data from DexScreener API with better contract handling"""
     try:
-        # Debug logging
-        logger.info(f"Querying DexScreener for token: {token_id}")
+        # Clean the input
+        token_id = token_id.strip()
+        logger.info(f"Querying DexScreener for: {token_id}")
         
-        # Search endpoint
+        # If it looks like a contract address (long alphanumeric string)
+        if len(token_id) > 30:
+            # Try multiple chains for contract address
+            chains = ['solana', 'ethereum', 'bsc', 'arbitrum', 'polygon']
+            for chain in chains:
+                url = f"{APIS['dexscreener']['url']}/pairs/{chain}/{token_id}"
+                logger.info(f"Trying chain {chain}: {url}")
+                
+                async with session.get(url) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        pairs = data.get('pairs', [])
+                        if pairs and len(pairs) > 0:
+                            pair = pairs[0]
+                            return {
+                                'price': float(pair.get('priceUsd', 0)),
+                                'change_24h': float(pair.get('priceChange', {}).get('h24', 0)),
+                                'volume_24h': float(pair.get('volume', {}).get('h24', 0)),
+                                'source': 'dexscreener',
+                                'extra': {
+                                    'liquidity': pair.get('liquidity', {}).get('usd', 0),
+                                    'dex': pair.get('dexId', 'unknown'),
+                                    'chain': chain,
+                                    'address': token_id
+                                }
+                            }
+        
+        # If not found by direct contract, try search
         search_url = f"{APIS['dexscreener']['url']}/pairs/search?q={token_id}"
-        logger.info(f"DexScreener search URL: {search_url}")
+        logger.info(f"Trying search: {search_url}")
         
         async with session.get(search_url) as resp:
             if resp.status == 200:
                 data = await resp.json()
-                logger.info(f"DexScreener response: {data}")
-                
                 pairs = data.get('pairs', [])
                 if pairs and len(pairs) > 0:
                     pair = pairs[0]
@@ -123,8 +149,6 @@ async def get_dexscreener_data(session: aiohttp.ClientSession, token_id: str) ->
                             'address': pair.get('baseToken', {}).get('address', '')
                         }
                     }
-            else:
-                logger.error(f"DexScreener API returned status {resp.status}")
 
     except Exception as e:
         logger.error(f"DexScreener API error: {str(e)}")
@@ -316,45 +340,34 @@ def get_random_response():
     return random.choice(responses)
 
 def extract_token(msg: str) -> Optional[str]:
-    """Extract token from message with improved pattern matching"""
+    """Extract token with better contract handling"""
     try:
         if not msg:
             return None
             
         msg = msg.lower().strip()
+        logger.info(f"Extracting token from: {msg}")
         
-        # Debug logging
-        logger.info(f"Extracting token from message: {msg}")
+        # Handle /analyze command
+        if msg.startswith('/analyze'):
+            parts = msg.split()
+            if len(parts) > 1:
+                return parts[1]
         
-        # Handle contract addresses (long alphanumeric strings)
-        if re.search(r'[a-zA-Z0-9]{30,}', msg):
-            address = re.findall(r'[a-zA-Z0-9]{30,}', msg)[0]
-            logger.info(f"Found contract address: {address}")
-            return address
+        # Handle contract addresses
+        contract_match = re.search(r'([a-zA-Z0-9]{30,})', msg)
+        if contract_match:
+            return contract_match.group(1)
         
-        # Common patterns for token extraction
-        patterns = [
-            r'price of (\w+)',
-            r'check (\w+)',
-            r'how is (\w+)',
-            r'\$(\w+)',
-            r'analyze (\w+)',
-        ]
+        # Handle "price of" format
+        if 'price of' in msg:
+            return msg.split('price of')[1].strip()
         
-        for pattern in patterns:
-            match = re.search(pattern, msg)
-            if match:
-                token = match.group(1)
-                logger.info(f"Found token using pattern {pattern}: {token}")
-                return token
-                
-        # If no patterns match, try to extract the last word
+        # Handle other formats
         words = msg.split()
-        if words:
-            potential_token = words[-1].strip()
-            if potential_token not in ['price', 'of', 'the', 'check']:
-                logger.info(f"Extracted potential token from last word: {potential_token}")
-                return potential_token
+        for word in words:
+            if len(word) > 30 and word.isalnum():
+                return word
                 
         return None
 
@@ -369,12 +382,10 @@ def index():
 
 @app.route('/ask', methods=['POST'])
 def ask():
-    """Handle incoming requests with detailed logging"""
+    """Handle requests with better error handling"""
     try:
         data = request.json
         message = data.get('message', '').strip()
-        
-        # Debug logging
         logger.info(f"Received message: {message}")
         
         # Extract token from message
@@ -396,7 +407,7 @@ def ask():
             else:
                 return jsonify({"response": "token giving me anxiety... can't find it anywhere... like my will to live..."})
 
-        return jsonify({"response": get_random_response()})
+        return jsonify({"response": "what token you looking for? my crystal ball is foggy..."})
 
     except Exception as e:
         logger.error(f"Error processing request: {str(e)}")
