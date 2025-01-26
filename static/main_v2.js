@@ -63,7 +63,16 @@ function addMessage(message, isUser) {
     messageDiv.className = `message ${isUser ? 'user-message' : 'agent-message'}`;
 
     if (!isUser) {
-        typeMessage(messageDiv, message);
+        // Split the message on our delimiter and create spans for each line
+        const lines = message.split('|||');
+        if (lines.length > 1) {
+            // If it's a chart message (has multiple lines)
+            messageDiv.style.whiteSpace = 'pre';
+            typeMessageWithLines(messageDiv, lines);
+        } else {
+            // Regular message
+            typeMessage(messageDiv, message);
+        }
     } else {
         messageDiv.textContent = message;
     }
@@ -72,14 +81,38 @@ function addMessage(message, isUser) {
     scrollToBottom();
 }
 
-// Faster typing speed (5ms instead of 15ms)
+// New function to handle typing multiple lines
+function typeMessageWithLines(element, lines, lineIndex = 0, charIndex = 0) {
+    if (lineIndex < lines.length) {
+        if (charIndex === 0 && lineIndex > 0) {
+            // Add a line break before each new line except the first
+            element.innerHTML += '\n';
+        }
+        
+        if (charIndex < lines[lineIndex].length) {
+            element.innerHTML += lines[lineIndex].charAt(charIndex);
+            setTimeout(() => {
+                typeMessageWithLines(element, lines, lineIndex, charIndex + 1);
+                scrollToBottom();
+            }, 5);
+        } else {
+            // Move to next line
+            setTimeout(() => {
+                typeMessageWithLines(element, lines, lineIndex + 1, 0);
+                scrollToBottom();
+            }, 5);
+        }
+    }
+}
+
+// Original typeMessage function (keep this for regular messages)
 function typeMessage(element, message, index = 0) {
     if (index < message.length) {
         element.textContent += message.charAt(index);
         setTimeout(() => {
             typeMessage(element, message, index + 1);
-            scrollToBottom();  // Scroll while typing
-        }, 5);  // Reduced from 15ms to 5ms for faster typing
+            scrollToBottom();
+        }, 5);
     }
 }
 
