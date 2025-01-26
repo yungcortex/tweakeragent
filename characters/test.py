@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify, render_template
+from flask import Flask, Blueprint, request, jsonify, render_template
 import os
 import json
 import time
@@ -14,12 +14,15 @@ from web3 import Web3
 from typing import Dict, Any, Optional
 import re
 
-# Create blueprint instead of Flask app
-bp = Blueprint('character', __name__)
-
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Create Flask app directly in test.py
+app = Flask(__name__)
+
+# Create blueprint instead of Flask app
+bp = Blueprint('character', __name__)
 
 # Get the absolute path to the project root directory
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -349,7 +352,7 @@ def extract_token(msg: str) -> Optional[str]:
 def index():
     return render_template('index.html')
 
-@bp.route('/ask', methods=['POST'])
+@app.route('/ask', methods=['POST'])
 def ask():
     """Handle incoming requests"""
     try:
@@ -384,3 +387,6 @@ def ask():
         logger.error(f"Error processing request: {str(e)}")
         logger.exception(e)
         return jsonify({"response": "having a mental breakdown... try again later... like my trading career..."})
+
+if __name__ == '__main__':
+    app.run(debug=True)
