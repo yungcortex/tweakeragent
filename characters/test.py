@@ -12,6 +12,7 @@ import aiohttp
 import asyncio
 from web3 import Web3
 from typing import Dict, Any, Optional
+import re
 
 # Setup logging with more detail
 logging.basicConfig(
@@ -93,24 +94,23 @@ async def get_binance_data(session: aiohttp.ClientSession, symbol: str) -> Optio
     return None
 
 async def get_dexscreener_data(session: aiohttp.ClientSession, token_id: str) -> Optional[Dict[str, Any]]:
-    """Get data from DexScreener API with priority"""
+    """Get data from DexScreener API"""
     try:
-        # Remove any $ prefix and spaces
-        token_id = token_id.replace('$', '').strip().lower()
+        # Debug logging
+        logger.info(f"Querying DexScreener for token: {token_id}")
         
-        # Try multiple chains for better coverage
-        chains = ['solana', 'ethereum', 'bsc', 'arbitrum', 'polygon']
-        
-        # First try direct pair search
+        # Search endpoint
         search_url = f"{APIS['dexscreener']['url']}/pairs/search?q={token_id}"
-        logger.info(f"Searching DexScreener: {search_url}")
+        logger.info(f"DexScreener search URL: {search_url}")
         
         async with session.get(search_url) as resp:
             if resp.status == 200:
                 data = await resp.json()
+                logger.info(f"DexScreener response: {data}")
+                
                 pairs = data.get('pairs', [])
                 if pairs and len(pairs) > 0:
-                    pair = pairs[0]  # Get the most relevant pair
+                    pair = pairs[0]
                     return {
                         'price': float(pair.get('priceUsd', 0)),
                         'change_24h': float(pair.get('priceChange', {}).get('h24', 0)),
@@ -120,38 +120,15 @@ async def get_dexscreener_data(session: aiohttp.ClientSession, token_id: str) ->
                             'liquidity': pair.get('liquidity', {}).get('usd', 0),
                             'dex': pair.get('dexId', 'unknown'),
                             'chain': pair.get('chainId', 'unknown'),
-                            'address': pair.get('baseToken', {}).get('address', ''),
-                            'holders': 'N/A'  # DexScreener doesn't provide holder count
+                            'address': pair.get('baseToken', {}).get('address', '')
                         }
                     }
-        
-        # If search fails, try each chain
-        for chain in chains:
-            url = f"{APIS['dexscreener']['url']}/pairs/{chain}/{token_id}"
-            logger.info(f"Trying DexScreener chain {chain}: {url}")
-            
-            async with session.get(url) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    pairs = data.get('pairs', [])
-                    if pairs and len(pairs) > 0:
-                        pair = pairs[0]
-                        return {
-                            'price': float(pair.get('priceUsd', 0)),
-                            'change_24h': float(pair.get('priceChange', {}).get('h24', 0)),
-                            'volume_24h': float(pair.get('volume', {}).get('h24', 0)),
-                            'source': 'dexscreener',
-                            'extra': {
-                                'liquidity': pair.get('liquidity', {}).get('usd', 0),
-                                'dex': pair.get('dexId', 'unknown'),
-                                'chain': pair.get('chainId', 'unknown'),
-                                'address': pair.get('baseToken', {}).get('address', ''),
-                                'holders': 'N/A'
-                            }
-                        }
+            else:
+                logger.error(f"DexScreener API returned status {resp.status}")
 
     except Exception as e:
         logger.error(f"DexScreener API error: {str(e)}")
+        logger.exception(e)
     return None
 
 async def get_coingecko_data(session: aiohttp.ClientSession, token_id: str) -> Optional[Dict[str, Any]]:
@@ -339,54 +316,51 @@ def get_random_response():
     return random.choice(responses)
 
 def extract_token(msg: str) -> Optional[str]:
-    """Enhanced token detection"""
+    """Extract token from message with improved pattern matching"""
     try:
+        if not msg:
+            return None
+            
         msg = msg.lower().strip()
         
-        # Handle contract addresses (including Solana format)
+        # Debug logging
+        logger.info(f"Extracting token from message: {msg}")
+        
+        # Handle contract addresses (long alphanumeric strings)
+        if re.search(r'[a-zA-Z0-9]{30,}', msg):
+            address = re.findall(r'[a-zA-Z0-9]{30,}', msg)[0]
+            logger.info(f"Found contract address: {address}")
+            return address
+        
+        # Common patterns for token extraction
+        patterns = [
+            r'price of (\w+)',
+            r'check (\w+)',
+            r'how is (\w+)',
+            r'\$(\w+)',
+            r'analyze (\w+)',
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, msg)
+            if match:
+                token = match.group(1)
+                logger.info(f"Found token using pattern {pattern}: {token}")
+                return token
+                
+        # If no patterns match, try to extract the last word
         words = msg.split()
-        for word in words:
-            # Clean the word
-            word = word.strip('?!.,')
-            
-            # Check for long alphanumeric strings (likely contract addresses)
-            if len(word) > 30 and word.isalnum():
-                logger.info(f"Found contract address: {word}")
-                return word
-            
-            # Check for 0x addresses
-            if word.startswith('0x'):
-                logger.info(f"Found 0x address: {word}")
-                return word
-        
-        # Handle $ prefixed tokens
-        if '$' in msg:
-            token = msg[msg.find('$')+1:].split()[0].strip()
-            logger.info(f"Found $ prefixed token: {token}")
-            return token
-        
-        # Handle "price of" format
-        if 'price of' in msg:
-            token = msg.split('price of')[1].strip()
-            logger.info(f"Found 'price of' format: {token}")
-            return token
-            
-        # Handle "price for" format
-        if 'price for' in msg:
-            token = msg.split('price for')[1].strip()
-            logger.info(f"Found 'price for' format: {token}")
-            return token
-
-        # Handle general case
-        for word in words:
-            word = word.strip('?!.,')
-            if word.isalnum() and word not in ['price', 'of', 'for', 'the']:
-                logger.info(f"Found token from general text: {word}")
-                return word
+        if words:
+            potential_token = words[-1].strip()
+            if potential_token not in ['price', 'of', 'the', 'check']:
+                logger.info(f"Extracted potential token from last word: {potential_token}")
+                return potential_token
                 
         return None
+
     except Exception as e:
         logger.error(f"Error in extract_token: {str(e)}")
+        logger.exception(e)
         return None
 
 @app.route('/')
@@ -395,12 +369,17 @@ def index():
 
 @app.route('/ask', methods=['POST'])
 def ask():
+    """Handle incoming requests with detailed logging"""
     try:
         data = request.json
         message = data.get('message', '').strip()
         
+        # Debug logging
+        logger.info(f"Received message: {message}")
+        
         # Extract token from message
         token_id = extract_token(message)
+        logger.info(f"Extracted token: {token_id}")
         
         if token_id:
             # Get token data asynchronously
@@ -409,10 +388,10 @@ def ask():
             analysis_data = loop.run_until_complete(get_token_data(token_id))
             loop.close()
             
+            logger.info(f"Analysis data: {analysis_data}")
+            
             if analysis_data:
                 response = format_analysis(analysis_data)
-                # Convert <br> tags to actual newlines for the frontend
-                response = response.replace('<br>', '\n')
                 return jsonify({"response": response})
             else:
                 return jsonify({"response": "token giving me anxiety... can't find it anywhere... like my will to live..."})
