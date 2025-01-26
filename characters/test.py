@@ -226,18 +226,16 @@ def generate_analysis_chart(data: Dict[str, Any]) -> str:
     sentiment = "🚀" if change > 0 else "💀"
     volume_rating = "High 📈" if volume > 1000000 else "Low 📉"
     
-    # Use Unicode Line Feed (LF) character
-    LF = '\u000A'  # This is a special line feed character
-    
-    return (
-        f"║ Market Analysis {sentiment} ║{LF}"
-        f"║ Price: ${price:<.6f} ║{LF}"
-        f"║ 24h Change: {change:.2f}% ║{LF}"
-        f"║ 24h Volume: ${volume:,.0f} ║{LF}"
-        f"║ Volume Rating: {volume_rating} ║{LF}"
-        f"║ Source: {data['source'].title()} ║{LF}"
+    # Use special formatting
+    return "\n".join([
+        f"║ Market Analysis {sentiment} ║",
+        f"║ Price: ${price:<.6f} ║",
+        f"║ 24h Change: {change:.2f}% ║",
+        f"║ 24h Volume: ${volume:,.0f} ║",
+        f"║ Volume Rating: {volume_rating} ║",
+        f"║ Source: {data['source'].title()} ║",
         f"║ Market Cap: ${market_cap:,.0f} ║"
-    )
+    ])
 
 def get_random_response():
     """Get a random non-analysis response with more variety"""
