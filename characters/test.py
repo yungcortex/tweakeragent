@@ -352,9 +352,24 @@ def extract_token(msg: str) -> Optional[str]:
 def index():
     return render_template('index.html')
 
-@app.route('/ask', methods=['POST'])
+@app.route('/')
+def home():
+    return jsonify({
+        "status": "online",
+        "message": "Tweaker Agent API is running! Send POST requests to /ask"
+    })
+
+@app.route('/ask', methods=['POST', 'OPTIONS'])
 def ask():
     """Handle incoming requests"""
+    # Handle CORS preflight requests
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
+        response.headers.add('Access-Control-Allow-Methods', 'POST')
+        return response
+
     try:
         data = request.json
         message = data.get('message', '').strip()
@@ -387,6 +402,14 @@ def ask():
         logger.error(f"Error processing request: {str(e)}")
         logger.exception(e)
         return jsonify({"response": "having a mental breakdown... try again later... like my trading career..."})
+
+# Add CORS support
+@app.after_request
+def after_request(response):
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
+    response.headers.add('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+    return response
 
 if __name__ == '__main__':
     app.run(debug=True)
