@@ -264,7 +264,7 @@ async def get_token_data(token_id: str) -> Optional[Dict[str, Any]]:
     return None
 
 def format_analysis(data: Dict[str, Any]) -> str:
-    """Format token analysis data into a single-line chart display"""
+    """Format token analysis data into a chart display"""
     try:
         # Get basic price data
         price = data.get('price', 0)
@@ -296,13 +296,14 @@ def format_analysis(data: Dict[str, Any]) -> str:
                     return f"${num:.8f}"
             return str(num)
 
-        # Create single-line analysis with emojis and proper spacing
+        # Format exactly like the screenshot
+        sources = data.get('sources', [data.get('source', 'unknown')])
         analysis = (
-            f"📊 CHART ANALYSIS 📊 ------------------------ 💰 Price: {format_number(price)} "
+            f"📊 CHART ANALYSIS 📊 ------------------------ 💰 Price: {format_number(price)}\n"
             f"📈 24h Change: {change_24h:+.2f}% 💎 Market Cap: {format_number(mcap)} 🏊 Liquidity: "
-            f"{format_number(liquidity)} 👥 Holders: {holders} 📊 Volume 24h: {format_number(volume_24h)} -- "
-            f"------------------------ 🔮 Prediction: {prediction} ------------------------ "
-            f"📡 Data: {', '.join(data.get('sources', [data.get('source', 'unknown')]))}"
+            f"{format_number(liquidity)} 👥 Holders: {holders} 📊 Volume 24h: {format_number(volume_24h)} --\n"
+            f"------------------------ 🔮 Prediction: {prediction}\n"
+            f"------------------------ 📡 Data: {', '.join(sources)}"
         )
         
         return analysis
