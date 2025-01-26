@@ -1,3 +1,6 @@
+import json
+from pathlib import Path
+
 CHARACTER = {
     "name": "TweakerAgent",
     "personality": "depressed, cynical, analytical, tech-savvy",
@@ -178,3 +181,8 @@ def get_market_sentiment(sentiment):
     """Get a random market sentiment phrase"""
     import random
     return random.choice(CHARACTER["responses"]["market_insights"].get(sentiment, ["..."]))
+
+def load_character_config():
+    config_path = Path(__file__).parent / "tweakeragent.character.json"
+    with open(config_path, 'r') as f:
+        return json.load(f)
