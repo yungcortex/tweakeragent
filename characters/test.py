@@ -260,7 +260,7 @@ async def get_token_data(token_id: str) -> Optional[Dict[str, Any]]:
     return None
 
 def format_analysis(data: Dict[str, Any]) -> str:
-    """Format token analysis data into a chart display with DexScreener chart link"""
+    """Format token analysis data with proper terminal line breaks"""
     try:
         # Get basic price data
         price = data.get('price', 0)
@@ -272,10 +272,6 @@ def format_analysis(data: Dict[str, Any]) -> str:
         mcap = extra.get('marketCap', 0)
         holders = extra.get('holders', 'N/A')
         liquidity = extra.get('liquidity', 0)
-        
-        # Get token address and chain for DexScreener link
-        token_address = extra.get('address', '')
-        chain = extra.get('chain', 'solana').lower()
         
         # Generate prediction based on 24h change
         if change_24h > 5:
@@ -296,29 +292,25 @@ def format_analysis(data: Dict[str, Any]) -> str:
                     return f"${num:.8f}"
             return str(num)
 
-        # Format with exact line breaks as specified
+        # Format with explicit line breaks that will render in terminal
         sources = data.get('sources', [data.get('source', 'unknown')])
         analysis = (
-            f"📊 CHART ANALYSIS 📊\n"
-            f"------------------------\n"
-            f"💰Price: {format_number(price)}\n\n"
-            f"📈 24h Change: {change_24h:+.2f}%\n"
-            f"💎 Market Cap: {format_number(mcap)}\n\n"
-            f"🏊 Liquidity: {format_number(liquidity)}\n"
-            f"👥 Holders: {holders}\n\n"
-            f"📊 Volume 24h: {format_number(volume_24h)}\n\n"
-            f"------------------------\n"
-            f"🔮 Prediction: {prediction}\n\n"
-            f"------------------------\n\n"
-            f"📡 Data: {', '.join(sources)}\n"
+            f"📊 CHART ANALYSIS 📊\r\n"
+            f"------------------------\r\n"
+            f"💰Price: {format_number(price)}\r\n\r\n"
+            f"📈 24h Change: {change_24h:+.2f}%\r\n"
+            f"💎 Market Cap: {format_number(mcap)}\r\n\r\n"
+            f"🏊 Liquidity: {format_number(liquidity)}\r\n"
+            f"👥 Holders: {holders}\r\n\r\n"
+            f"📊 Volume 24h: {format_number(volume_24h)}\r\n\r\n"
+            f"------------------------\r\n"
+            f"🔮 Prediction: {prediction}\r\n\r\n"
+            f"------------------------\r\n\r\n"
+            f"📡 Data: {', '.join(sources)}\r\n"
         )
-
-        # Add DexScreener chart link if we have a token address
-        if token_address:
-            dex_url = f"https://dexscreener.com/{chain}/{token_address}"
-            analysis += f"\n📈 Live Chart: {dex_url}\n"
-            
-        return analysis
+        
+        # Replace standard line breaks with carriage return + line feed
+        return analysis.replace('\n', '\r\n')
 
     except Exception as e:
         logger.error(f"Error formatting analysis: {str(e)}")
@@ -408,38 +400,29 @@ def ask():
     try:
         data = request.json
         message = data.get('message', '').strip()
-        print(f"Received message: {message}")  # Debug print
-        logger.info(f"Received message: {message}")
         
         # Extract token from message
         token_id = extract_token(message)
-        print(f"Extracted token ID: {token_id}")  # Debug print
-        logger.info(f"Extracted token: {token_id}")
         
         if token_id:
             # Get token data asynchronously
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             analysis_data = loop.run_until_complete(get_token_data(token_id))
-            print(f"Analysis data: {analysis_data}")  # Debug print
             loop.close()
             
-            logger.info(f"Analysis data: {analysis_data}")
-
             if analysis_data:
                 response = format_analysis(analysis_data)
-                print(f"Formatted response: {response}")  # Debug print
-                return jsonify({"response": response})
+                # Ensure line breaks are preserved in JSON response
+                return jsonify({"response": response.replace('\n', '\r\n')})
             else:
-                print("No analysis data found")  # Debug print
                 return jsonify({"response": "token giving me anxiety... can't find it anywhere... like my will to live..."})
 
         return jsonify({"response": get_random_response()})
 
     except Exception as e:
-        print(f"Error in ask route: {str(e)}")  # Debug print
         logger.error(f"Error processing request: {str(e)}")
-        logger.exception(e)  # This will print the full stack trace
+        logger.exception(e)
         return jsonify({"response": "having a mental breakdown... try again later... like my trading career..."})
 
 if __name__ == '__main__':
