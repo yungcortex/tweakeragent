@@ -1,1 +1,1 @@
-web: gunicorn characters.test:app
+web: gunicorn app:app
