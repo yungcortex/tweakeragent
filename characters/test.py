@@ -226,20 +226,16 @@ def generate_analysis_chart(data: Dict[str, Any]) -> str:
     sentiment = "🚀" if change > 0 else "💀"
     volume_rating = "High 📈" if volume > 1000000 else "Low 📉"
     
-    # First line
-    line1 = f"║ Market Analysis {sentiment} ║ ║ Price: ${price:<.6f} ║"
-    
-    # Second line
-    line2 = f"║ 24h Change: {change:.2f}% ║ ║ 24h Volume: ${volume:,.0f} ║"
-    
-    # Third line
-    line3 = f"║ Volume Rating: {volume_rating} ║ ║ Source: {data['source'].title()} ║"
-    
-    # Fourth line
-    line4 = f"║ Market Cap: ${market_cap:,.0f} ║"
-
-    # Combine lines with explicit line breaks and double spaces
-    return f"{line1}\n\n{line2}\n\n{line3}\n\n{line4}"
+    # Use <br> tags for line breaks
+    return (
+        f"║ Market Analysis {sentiment} ║<br>"
+        f"║ Price: ${price:<.6f} ║<br>"
+        f"║ 24h Change: {change:.2f}% ║<br>"
+        f"║ 24h Volume: ${volume:,.0f} ║<br>"
+        f"║ Volume Rating: {volume_rating} ║<br>"
+        f"║ Source: {data['source'].title()} ║<br>"
+        f"║ Market Cap: ${market_cap:,.0f} ║"
+    )
 
 def get_random_response():
     """Get a random non-analysis response with more variety"""
