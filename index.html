@@ -1,13 +1,29 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Tweaker Agent</title>
+    <title>TweakerAgent</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles_v2.css') }}">
+    <style>
+        .message-content {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-family: monospace;
+        }
+    </style>
 </head>
 <body>
     <div class="chat-container">
         <div class="chat-header">
-            <h1>TweakerAgent</h1>
+            <div class="ascii-art">
+<pre>
+     TWEAKER      ▀█▀ █░█░█ █▀▀ ▄▀█ █▄▀ █▀▀ █▀█
+    ┌──[M]──┐      █  ▀▄▀▄▀ ██▄ █▀█ █ █ ██▄ █▀▄
+    │  <>  │      ▄▀█ █▀▀ █▀▀ █▄░█ ▀█▀
+    │ v.2.1│      █▀█ █▄█ ██▄ █░▀█ ░█░
+    └──────┘
+   NEURAL CORE
+</pre>
+            </div>
             <div class="status-indicator">Online</div>
         </div>
         <div class="messages" id="messages">
