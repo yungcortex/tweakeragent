@@ -226,8 +226,8 @@ def generate_analysis_chart(data: Dict[str, Any]) -> str:
     sentiment = "🚀" if change > 0 else "💀"
     volume_rating = "High 📈" if volume > 1000000 else "Low 📉"
     
-    # Use special formatting
-    return "\n".join([
+    # Create parts of the message with React-friendly line breaks
+    parts = [
         f"║ Market Analysis {sentiment} ║",
         f"║ Price: ${price:<.6f} ║",
         f"║ 24h Change: {change:.2f}% ║",
@@ -235,7 +235,10 @@ def generate_analysis_chart(data: Dict[str, Any]) -> str:
         f"║ Volume Rating: {volume_rating} ║",
         f"║ Source: {data['source'].title()} ║",
         f"║ Market Cap: ${market_cap:,.0f} ║"
-    ])
+    ]
+    
+    # Join with a special delimiter that React can split on
+    return "|||".join(parts)
 
 def get_random_response():
     """Get a random non-analysis response with more variety"""
