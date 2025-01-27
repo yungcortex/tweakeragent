@@ -66,7 +66,8 @@ APIS = {
     },
     'birdeye': {
         'url': "https://public-api.birdeye.so",
-        'timeout': 10
+        'timeout': 10,
+        'api_key': 'YOUR_BIRDEYE_API_KEY'  # Replace with your API key
     },
 }
 
@@ -101,26 +102,25 @@ async def get_binance_data(session: aiohttp.ClientSession, symbol: str) -> Optio
     return None
 
 async def get_dexscreener_data(session: aiohttp.ClientSession, token_address: str) -> Optional[Dict[str, Any]]:
-    """Get data from DexScreener API"""
+    """Get data from DexScreener API with improved error handling"""
     try:
-        # Handle both Solana and Ethereum addresses
+        # For Solana addresses
         if len(token_address) > 32 and not token_address.startswith('0x'):
-            # It's likely a Solana address
-            url = f"{APIS['dexscreener']['url']}/dex/tokens/solana/{token_address}"
+            url = f"{APIS['dexscreener']['url']}/dex/search?q={token_address}"
         else:
-            # Default to Ethereum/BSC format
-            url = f"{APIS['dexscreener']['url']}/dex/tokens/{token_address}"
-            
+            url = f"{APIS['dexscreener']['url']}/dex/search?q={token_address}"
+        
         logger.info(f"Querying DexScreener: {url}")
         
         async with session.get(url) as resp:
             if resp.status == 200:
                 data = await resp.json()
                 if data.get('pairs') and len(data['pairs']) > 0:
-                    # Sort pairs by liquidity to get the most relevant one
+                    # Sort pairs by liquidity
                     pairs = sorted(data['pairs'], 
                                  key=lambda x: float(x.get('liquidity', {}).get('usd', 0) or 0), 
                                  reverse=True)
+                    
                     pair = pairs[0]  # Get the most liquid pair
                     
                     return {
@@ -131,7 +131,6 @@ async def get_dexscreener_data(session: aiohttp.ClientSession, token_address: st
                         'extra': {
                             'marketCap': float(pair.get('fdv', 0)),
                             'liquidity': float(pair.get('liquidity', {}).get('usd', 0)),
-                            'holders': pair.get('holders', 'N/A'),
                             'dex': pair.get('dexId', 'unknown'),
                             'chain': pair.get('chainId', 'unknown')
                         }
@@ -240,29 +239,32 @@ async def get_pumpfun_data(session: aiohttp.ClientSession, token_id: str) -> Opt
     return None
 
 def generate_analysis_chart(data: Dict[str, Any]) -> str:
-    """Generate ASCII chart analysis"""
+    """Generate ASCII chart analysis with improved formatting"""
     price = data['price']
     change = data['change_24h']
     volume = data['volume_24h']
-    market_cap = data.get('market_cap', 0)
     
     # Determine market sentiment indicators
     sentiment = "🚀" if change > 0 else "💀"
     volume_rating = "High 📈" if volume > 1000000 else "Low 📉"
     
-    # Create parts of the message with React-friendly line breaks
-    parts = [
+    # Format numbers with appropriate precision
+    if price < 0.000001:
+        price_str = f"{price:.12f}"
+    elif price < 0.01:
+        price_str = f"{price:.8f}"
+    else:
+        price_str = f"{price:.6f}"
+    
+    return "\n".join([
         f"║ Market Analysis {sentiment} ║",
-        f"║ Price: ${price:<.6f} ║",
+        f"║ Price: ${price_str} ║",
         f"║ 24h Change: {change:.2f}% ║",
         f"║ 24h Volume: ${volume:,.0f} ║",
         f"║ Volume Rating: {volume_rating} ║",
         f"║ Source: {data['source'].title()} ║",
-        f"║ Market Cap: ${market_cap:,.0f} ║"
-    ]
-    
-    # Join with a special delimiter that React can split on
-    return "|||".join(parts)
+        f"║ Chain: {data.get('extra', {}).get('chain', 'unknown').title()} ║"
+    ])
 
 def get_random_response():
     """Get a random non-analysis response with more variety"""
@@ -402,27 +404,34 @@ def after_request(response):
     return response
 
 async def get_birdeye_data(session: aiohttp.ClientSession, token_address: str) -> Optional[Dict[str, Any]]:
-    """Get data from Birdeye API for Solana tokens"""
+    """Get data from Birdeye API"""
     try:
-        url = f"{APIS['birdeye']['url']}/public/price?address={token_address}"
-        headers = {
-            'X-API-KEY': 'your_birdeye_api_key'  # You'll need to get an API key from birdeye
-        }
+        url = f"{APIS['birdeye']['url']}/public/token_list?chain=solana"
+        headers = {'X-API-KEY': APIS['birdeye']['api_key']}
         
         async with session.get(url, headers=headers) as resp:
             if resp.status == 200:
                 data = await resp.json()
-                if data.get('data'):
-                    token_data = data['data'].get(token_address, {})
-                    return {
-                        'price': float(token_data.get('value', 0)),
-                        'change_24h': float(token_data.get('priceChange24h', 0)),
-                        'volume_24h': float(token_data.get('volume24h', 0)),
-                        'source': 'birdeye',
-                        'extra': {
-                            'chain': 'solana'
-                        }
-                    }
+                if data.get('success') and data.get('data', {}).get('tokens'):
+                    token = next((t for t in data['data']['tokens'] 
+                                if t.get('address') == token_address), None)
+                    if token:
+                        price_url = f"{APIS['birdeye']['url']}/public/price?address={token_address}"
+                        async with session.get(price_url, headers=headers) as price_resp:
+                            if price_resp.status == 200:
+                                price_data = await price_resp.json()
+                                if price_data.get('data'):
+                                    return {
+                                        'price': float(price_data['data'].get('value', 0)),
+                                        'change_24h': float(price_data['data'].get('priceChange24h', 0)),
+                                        'volume_24h': float(price_data['data'].get('volume24h', 0)),
+                                        'source': 'birdeye',
+                                        'extra': {
+                                            'chain': 'solana',
+                                            'symbol': token.get('symbol', ''),
+                                            'name': token.get('name', '')
+                                        }
+                                    }
     except Exception as e:
         logger.error(f"Birdeye API error: {str(e)}")
     return None
@@ -472,39 +481,28 @@ async def get_raydium_data(session: aiohttp.ClientSession, token_address: str) -
     return None
 
 async def get_token_data(token_id: str) -> Optional[Dict[str, Any]]:
-    """Get token data from multiple APIs"""
+    """Get token data from multiple sources"""
     async with aiohttp.ClientSession() as session:
-        # For Solana tokens, try multiple APIs in parallel
+        results = []
+        
+        # Try DexScreener first
+        dex_data = await get_dexscreener_data(session, token_id)
+        if dex_data:
+            results.append(dex_data)
+        
+        # If it's a Solana address, try Birdeye
         if len(token_id) > 32 and not token_id.startswith('0x'):
-            tasks = [
-                get_dexscreener_data(session, token_id),
-                get_birdeye_data(session, token_id),
-                get_jupiter_data(session, token_id),
-                get_raydium_data(session, token_id)
-            ]
-            
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-            
-            # Filter out errors and None results
-            valid_results = [r for r in results if isinstance(r, dict)]
-            
-            if valid_results:
-                # Return the result with the highest volume
-                return max(valid_results, 
-                          key=lambda x: float(x.get('volume_24h', 0)) if x.get('volume_24h') else 0)
+            birdeye_data = await get_birdeye_data(session, token_id)
+            if birdeye_data:
+                results.append(birdeye_data)
         
-        # For Ethereum tokens
-        elif token_id.startswith('0x'):
-            data = await get_dexscreener_data(session, token_id)
-            if data:
-                return data
+        # If we got any results, return the one with highest volume
+        if results:
+            return max(results, 
+                      key=lambda x: float(x.get('volume_24h', 0)) if x.get('volume_24h') else 0)
         
-        # For major tokens, try CoinGecko
-        data = await get_coingecko_data(session, token_id)
-        if data:
-            return data
-            
-    return None
+        # If no results, try CoinGecko as fallback
+        return await get_coingecko_data(session, token_id)
 
 if __name__ == '__main__':
     app.run(debug=True)
