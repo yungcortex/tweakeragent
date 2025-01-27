@@ -95,12 +95,26 @@ async def get_binance_data(session: aiohttp.ClientSession, symbol: str) -> Optio
 async def get_dexscreener_data(session: aiohttp.ClientSession, token_address: str) -> Optional[Dict[str, Any]]:
     """Get data from DexScreener API"""
     try:
-        url = f"https://api.dexscreener.com/latest/dex/tokens/{token_address}"
+        # Handle both Solana and Ethereum addresses
+        if len(token_address) > 32 and not token_address.startswith('0x'):
+            # It's likely a Solana address
+            url = f"{APIS['dexscreener']['url']}/dex/tokens/solana/{token_address}"
+        else:
+            # Default to Ethereum/BSC format
+            url = f"{APIS['dexscreener']['url']}/dex/tokens/{token_address}"
+            
+        logger.info(f"Querying DexScreener: {url}")
+        
         async with session.get(url) as resp:
             if resp.status == 200:
                 data = await resp.json()
                 if data.get('pairs') and len(data['pairs']) > 0:
-                    pair = data['pairs'][0]  # Get the most liquid pair
+                    # Sort pairs by liquidity to get the most relevant one
+                    pairs = sorted(data['pairs'], 
+                                 key=lambda x: float(x.get('liquidity', {}).get('usd', 0) or 0), 
+                                 reverse=True)
+                    pair = pairs[0]  # Get the most liquid pair
+                    
                     return {
                         'price': float(pair.get('priceUsd', 0)),
                         'change_24h': float(pair.get('priceChange', {}).get('h24', 0)),
@@ -109,7 +123,9 @@ async def get_dexscreener_data(session: aiohttp.ClientSession, token_address: st
                         'extra': {
                             'marketCap': float(pair.get('fdv', 0)),
                             'liquidity': float(pair.get('liquidity', {}).get('usd', 0)),
-                            'holders': pair.get('holders', 'N/A')
+                            'holders': pair.get('holders', 'N/A'),
+                            'dex': pair.get('dexId', 'unknown'),
+                            'chain': pair.get('chainId', 'unknown')
                         }
                     }
     except Exception as e:
@@ -381,10 +397,29 @@ async def get_token_data(token_id: str) -> Optional[Dict[str, Any]]:
     """Get token data from APIs"""
     async with aiohttp.ClientSession() as session:
         # Try DexScreener first if it's a contract address
-        if token_id.startswith('0x'):
+        if len(token_id) > 32:  # Either Solana or Ethereum address
             data = await get_dexscreener_data(session, token_id)
             if data:
                 return data
+                
+        # Try Raydium API for Solana tokens
+        if len(token_id) > 32 and not token_id.startswith('0x'):
+            try:
+                async with session.get(f"{APIS['raydium']['url']}/price/{token_id}") as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        if data.get('data'):
+                            return {
+                                'price': float(data['data'].get('price', 0)),
+                                'change_24h': float(data['data'].get('priceChange24h', 0)),
+                                'volume_24h': float(data['data'].get('volume24h', 0)),
+                                'source': 'raydium',
+                                'extra': {
+                                    'chain': 'solana'
+                                }
+                            }
+            except Exception as e:
+                logger.error(f"Raydium API error: {str(e)}")
         
         # Try CoinGecko for known tokens
         data = await get_coingecko_data(session, token_id)
