@@ -59,7 +59,15 @@ APIS = {
     'raydium': {
         'url': "https://api.raydium.io/v2",
         'timeout': 10
-    }
+    },
+    'jupiter': {
+        'url': "https://price.jup.ag/v4",
+        'timeout': 10
+    },
+    'birdeye': {
+        'url': "https://public-api.birdeye.so",
+        'timeout': 10
+    },
 }
 
 # Token mappings for different platforms
@@ -393,35 +401,105 @@ def after_request(response):
     response.headers.add('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
     return response
 
+async def get_birdeye_data(session: aiohttp.ClientSession, token_address: str) -> Optional[Dict[str, Any]]:
+    """Get data from Birdeye API for Solana tokens"""
+    try:
+        url = f"{APIS['birdeye']['url']}/public/price?address={token_address}"
+        headers = {
+            'X-API-KEY': 'your_birdeye_api_key'  # You'll need to get an API key from birdeye
+        }
+        
+        async with session.get(url, headers=headers) as resp:
+            if resp.status == 200:
+                data = await resp.json()
+                if data.get('data'):
+                    token_data = data['data'].get(token_address, {})
+                    return {
+                        'price': float(token_data.get('value', 0)),
+                        'change_24h': float(token_data.get('priceChange24h', 0)),
+                        'volume_24h': float(token_data.get('volume24h', 0)),
+                        'source': 'birdeye',
+                        'extra': {
+                            'chain': 'solana'
+                        }
+                    }
+    except Exception as e:
+        logger.error(f"Birdeye API error: {str(e)}")
+    return None
+
+async def get_jupiter_data(session: aiohttp.ClientSession, token_address: str) -> Optional[Dict[str, Any]]:
+    """Get data from Jupiter API"""
+    try:
+        url = f"{APIS['jupiter']['url']}/price?ids={token_address}"
+        async with session.get(url) as resp:
+            if resp.status == 200:
+                data = await resp.json()
+                if data.get('data'):
+                    token_data = data['data'].get(token_address)
+                    if token_data:
+                        return {
+                            'price': float(token_data.get('price', 0)),
+                            'change_24h': 0,  # Jupiter doesn't provide this
+                            'volume_24h': 0,  # Jupiter doesn't provide this
+                            'source': 'jupiter',
+                            'extra': {
+                                'chain': 'solana'
+                            }
+                        }
+    except Exception as e:
+        logger.error(f"Jupiter API error: {str(e)}")
+    return None
+
+async def get_raydium_data(session: aiohttp.ClientSession, token_address: str) -> Optional[Dict[str, Any]]:
+    """Get data from Raydium API"""
+    try:
+        url = f"{APIS['raydium']['url']}/price/{token_address}"
+        async with session.get(url) as resp:
+            if resp.status == 200:
+                data = await resp.json()
+                if data.get('data'):
+                    return {
+                        'price': float(data['data'].get('price', 0)),
+                        'change_24h': float(data['data'].get('priceChange24h', 0)),
+                        'volume_24h': float(data['data'].get('volume24h', 0)),
+                        'source': 'raydium',
+                        'extra': {
+                            'chain': 'solana'
+                        }
+                    }
+    except Exception as e:
+        logger.error(f"Raydium API error: {str(e)}")
+    return None
+
 async def get_token_data(token_id: str) -> Optional[Dict[str, Any]]:
-    """Get token data from APIs"""
+    """Get token data from multiple APIs"""
     async with aiohttp.ClientSession() as session:
-        # Try DexScreener first if it's a contract address
-        if len(token_id) > 32:  # Either Solana or Ethereum address
+        # For Solana tokens, try multiple APIs in parallel
+        if len(token_id) > 32 and not token_id.startswith('0x'):
+            tasks = [
+                get_dexscreener_data(session, token_id),
+                get_birdeye_data(session, token_id),
+                get_jupiter_data(session, token_id),
+                get_raydium_data(session, token_id)
+            ]
+            
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            # Filter out errors and None results
+            valid_results = [r for r in results if isinstance(r, dict)]
+            
+            if valid_results:
+                # Return the result with the highest volume
+                return max(valid_results, 
+                          key=lambda x: float(x.get('volume_24h', 0)) if x.get('volume_24h') else 0)
+        
+        # For Ethereum tokens
+        elif token_id.startswith('0x'):
             data = await get_dexscreener_data(session, token_id)
             if data:
                 return data
-                
-        # Try Raydium API for Solana tokens
-        if len(token_id) > 32 and not token_id.startswith('0x'):
-            try:
-                async with session.get(f"{APIS['raydium']['url']}/price/{token_id}") as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        if data.get('data'):
-                            return {
-                                'price': float(data['data'].get('price', 0)),
-                                'change_24h': float(data['data'].get('priceChange24h', 0)),
-                                'volume_24h': float(data['data'].get('volume24h', 0)),
-                                'source': 'raydium',
-                                'extra': {
-                                    'chain': 'solana'
-                                }
-                            }
-            except Exception as e:
-                logger.error(f"Raydium API error: {str(e)}")
         
-        # Try CoinGecko for known tokens
+        # For major tokens, try CoinGecko
         data = await get_coingecko_data(session, token_id)
         if data:
             return data
