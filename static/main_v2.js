@@ -11,19 +11,34 @@ function sendMessage() {
         const commonTickers = ['btc', 'eth', 'sol', 'bnb', 'xrp', 'doge', 'ada', 'dot', 'matic', 'link'];
 
         const lowerMessage = message.toLowerCase();
+        
+        // Add Solana address detection (Base58 format)
+        const isSolanaAddress = /[1-9A-HJ-NP-Za-km-z]{32,44}/.test(message);
+        const isEthAddress = /0x[a-fA-F0-9]{40}/.test(message);
+        
         const isAskingAboutCrypto = (
             cryptoKeywords.some(keyword => lowerMessage.includes(keyword)) ||
             commonTickers.some(ticker => lowerMessage.includes(ticker)) ||
-            /0x[a-fA-F0-9]{40}/.test(message)
+            isSolanaAddress ||
+            isEthAddress
         );
 
         let token = '';
         if (isAskingAboutCrypto) {
+            // First check for common tickers
             token = commonTickers.find(ticker => lowerMessage.includes(ticker)) || '';
+            
             if (!token) {
-                const addressMatch = message.match(/0x[a-fA-F0-9]{40}/);
-                if (addressMatch) {
-                    token = addressMatch[0];
+                // Then check for Solana address
+                const solanaMatch = message.match(/[1-9A-HJ-NP-Za-km-z]{32,44}/);
+                if (solanaMatch) {
+                    token = solanaMatch[0];
+                } else {
+                    // Finally check for Ethereum address
+                    const ethMatch = message.match(/0x[a-fA-F0-9]{40}/);
+                    if (ethMatch) {
+                        token = ethMatch[0];
+                    }
                 }
             }
         }
@@ -34,7 +49,8 @@ function sendMessage() {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                message: isAskingAboutCrypto ? `/analyze ${token || message}` : message
+                message: isAskingAboutCrypto ? `/analyze ${token || message}` : message,
+                chain: isSolanaAddress ? 'solana' : 'ethereum' // Add chain information
             })
         })
         .then(response => {
