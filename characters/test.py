@@ -13,6 +13,7 @@ import asyncio
 from web3 import Web3
 from typing import Dict, Any, Optional
 import re
+import talib
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -198,52 +199,94 @@ async def get_defillama_data(session: aiohttp.ClientSession, token_id: str) -> O
         logger.error(f"DefiLlama API error: {str(e)}")
     return None
 
-async def get_pumpfun_data(session: aiohttp.ClientSession, token_id: str) -> Optional[Dict[str, Any]]:
-    """Get data from Pump.fun API"""
+async def get_pumpfun_data(session: aiohttp.ClientSession, token_address: str) -> Optional[Dict[str, Any]]:
+    """Get data from Pump.fun API with improved error handling"""
     try:
-        # Remove any $ prefix and spaces
-        token_id = token_id.replace('$', '').strip()
-        
-        # Try both with and without /tokens/ endpoint
-        urls = [
-            f"{APIS['pump_fun']['url']}/tokens/{token_id}",
-            f"{APIS['pump_fun']['url']}/{token_id}"
-        ]
-        
-        for url in urls:
-            logger.info(f"Trying PumpFun URL: {url}")
-            try:
-                async with session.get(url) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        logger.info(f"PumpFun response: {data}")
-                        
-                        if data.get('data'):
-                            token_data = data['data']
-                            return {
-                                'price': float(token_data.get('price', 0)),
-                                'change_24h': float(token_data.get('price_change_24h', 0)),
-                                'volume_24h': float(token_data.get('volume_24h', 0)),
-                                'source': 'pump_fun',
-                                'extra': {
-                                    'liquidity': token_data.get('liquidity', 0),
-                                    'dex': 'pump.fun'
-                                }
-                            }
-            except Exception as e:
-                logger.error(f"Error with URL {url}: {str(e)}")
-                continue
-                
+        url = f"{APIS['pump_fun']['url']}/token/{token_address}"
+        async with session.get(url) as resp:
+            if resp.status == 200:
+                data = await resp.json()
+                if data.get('success') and data.get('data'):
+                    token_data = data['data']
+                    return {
+                        'price': float(token_data.get('price', 0)),
+                        'change_24h': float(token_data.get('price_change_24h', 0)),
+                        'volume_24h': float(token_data.get('volume_24h', 0)),
+                        'source': 'pump_fun',
+                        'extra': {
+                            'marketCap': float(token_data.get('market_cap', 0)),
+                            'chain': token_data.get('chain', 'unknown'),
+                            'historical': token_data.get('price_history', [])
+                        }
+                    }
     except Exception as e:
-        logger.error(f"Pump.fun API error for {token_id}: {str(e)}")
+        logger.error(f"Pump.fun API error: {str(e)}")
     return None
 
+def analyze_technical_indicators(price_history) -> Dict[str, Any]:
+    """Analyze technical indicators for price prediction"""
+    try:
+        prices = np.array([float(p['price']) for p in price_history])
+        
+        # Calculate RSI
+        rsi = talib.RSI(prices)
+        current_rsi = rsi[-1]
+        
+        # Calculate MACD
+        macd, signal, hist = talib.MACD(prices)
+        current_macd = macd[-1]
+        current_signal = signal[-1]
+        
+        # Calculate Bollinger Bands
+        upper, middle, lower = talib.BBANDS(prices)
+        current_upper = upper[-1]
+        current_middle = middle[-1]
+        current_lower = lower[-1]
+        
+        # Simple trend analysis
+        short_ma = talib.SMA(prices, timeperiod=5)
+        long_ma = talib.SMA(prices, timeperiod=20)
+        
+        # Determine market conditions
+        is_oversold = current_rsi < 30
+        is_overbought = current_rsi > 70
+        macd_bullish = current_macd > current_signal
+        price_above_ma = prices[-1] > long_ma[-1]
+        bb_squeeze = (current_upper - current_lower) / current_middle < 0.1
+        
+        # Generate analysis
+        analysis = {
+            'rsi': current_rsi,
+            'macd_trend': 'Bullish' if macd_bullish else 'Bearish',
+            'bb_position': 'Squeeze' if bb_squeeze else 'Normal',
+            'trend': 'Uptrend' if price_above_ma else 'Downtrend',
+            'signals': []
+        }
+        
+        # Generate trading signals
+        if is_oversold and macd_bullish:
+            analysis['signals'].append('Strong Buy Signal')
+        elif is_overbought and not macd_bullish:
+            analysis['signals'].append('Consider Taking Profits')
+        elif bb_squeeze:
+            analysis['signals'].append('Potential Breakout Incoming')
+        
+        return analysis
+    except Exception as e:
+        logger.error(f"Technical analysis error: {str(e)}")
+        return {'error': 'Unable to perform technical analysis'}
+
 def generate_analysis_chart(data: Dict[str, Any]) -> str:
-    """Generate ASCII chart analysis with improved formatting"""
+    """Generate ASCII chart analysis with technical indicators"""
     price = data['price']
     change = data['change_24h']
     volume = data['volume_24h']
     market_cap = data.get('extra', {}).get('marketCap', 0)
+    
+    # Get technical analysis if historical data is available
+    technical_analysis = None
+    if data.get('extra', {}).get('historical'):
+        technical_analysis = analyze_technical_indicators(data['extra']['historical'])
     
     # Determine market sentiment indicators
     sentiment = "🚀" if change > 0 else "💀"
@@ -257,7 +300,8 @@ def generate_analysis_chart(data: Dict[str, Any]) -> str:
     else:
         price_str = f"{price:.6f}"
     
-    return "\n".join([
+    # Base chart
+    chart = [
         f"║ Market Analysis {sentiment} ║",
         f"║ Price: ${price_str} ║",
         f"║ Market Cap: ${market_cap:,.0f} ║",
@@ -266,7 +310,26 @@ def generate_analysis_chart(data: Dict[str, Any]) -> str:
         f"║ Volume Rating: {volume_rating} ║",
         f"║ Source: {data['source'].title()} ║",
         f"║ Chain: {data.get('extra', {}).get('chain', 'unknown').title()} ║"
-    ])
+    ]
+    
+    # Add technical analysis if available
+    if technical_analysis and not technical_analysis.get('error'):
+        chart.extend([
+            "║ Technical Analysis ║",
+            f"║ RSI: {technical_analysis['rsi']:.2f} ║",
+            f"║ MACD Trend: {technical_analysis['macd_trend']} ║",
+            f"║ Bollinger Bands: {technical_analysis['bb_position']} ║",
+            f"║ Overall Trend: {technical_analysis['trend']} ║"
+        ])
+        
+        # Add trading signals
+        if technical_analysis['signals']:
+            chart.extend([
+                "║ Signals ║",
+                *[f"║ • {signal} ║" for signal in technical_analysis['signals']]
+            ])
+    
+    return "\n".join(chart)
 
 def get_random_response():
     """Get a random non-analysis response with more variety"""
@@ -487,7 +550,12 @@ async def get_token_data(token_id: str) -> Optional[Dict[str, Any]]:
     async with aiohttp.ClientSession() as session:
         results = []
         
-        # Try DexScreener first
+        # Try PumpFun first for new listings
+        pump_data = await get_pumpfun_data(session, token_id)
+        if pump_data:
+            results.append(pump_data)
+        
+        # Try DexScreener
         dex_data = await get_dexscreener_data(session, token_id)
         if dex_data:
             results.append(dex_data)
