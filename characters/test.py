@@ -243,6 +243,7 @@ def generate_analysis_chart(data: Dict[str, Any]) -> str:
     price = data['price']
     change = data['change_24h']
     volume = data['volume_24h']
+    market_cap = data.get('extra', {}).get('marketCap', 0)
     
     # Determine market sentiment indicators
     sentiment = "🚀" if change > 0 else "💀"
@@ -259,6 +260,7 @@ def generate_analysis_chart(data: Dict[str, Any]) -> str:
     return "\n".join([
         f"║ Market Analysis {sentiment} ║",
         f"║ Price: ${price_str} ║",
+        f"║ Market Cap: ${market_cap:,.0f} ║",
         f"║ 24h Change: {change:.2f}% ║",
         f"║ 24h Volume: ${volume:,.0f} ║",
         f"║ Volume Rating: {volume_rating} ║",
