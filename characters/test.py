@@ -372,7 +372,7 @@ def generate_detailed_analysis(data: Dict[str, Any], technical_analysis: Dict[st
     return "\n".join(analysis_text)
 
 def generate_analysis_chart(data: Dict[str, Any]) -> str:
-    """Generate ASCII chart analysis with ticker and detailed prediction"""
+    """Generate ASCII chart analysis with fixed width formatting"""
     price = data['price']
     change = data['change_24h']
     volume = data['volume_24h']
@@ -384,10 +384,6 @@ def generate_analysis_chart(data: Dict[str, Any]) -> str:
     if data.get('extra', {}).get('historical'):
         technical_analysis = analyze_technical_indicators(data['extra']['historical'])
     
-    # Determine market sentiment indicators
-    sentiment = "🚀" if change > 0 else "💀"
-    volume_rating = "High 📈" if volume > 1000000 else "Low 📉"
-    
     # Format numbers with appropriate precision
     if price < 0.000001:
         price_str = f"{price:.12f}"
@@ -396,21 +392,77 @@ def generate_analysis_chart(data: Dict[str, Any]) -> str:
     else:
         price_str = f"{price:.6f}"
     
-    # Base chart with ticker
+    # Determine emojis based on conditions
+    sentiment = "🚀" if change > 0 else "💀"
+    volume_rating = "High 📈" if volume > 1000000 else "Low 📉"
+    
+    # Create fixed-width box (60 characters wide)
+    def create_line(text: str, align: str = 'left') -> str:
+        """Create a fixed-width line with proper padding"""
+        max_width = 58  # 60 - 2 for borders
+        if align == 'center':
+            return f"║ {text.center(max_width)} ║"
+        return f"║ {text:<{max_width}} ║"
+    
+    # Base chart
     chart = [
-        f"║ {ticker} Analysis {sentiment} ║",
-        f"║ Price: ${price_str} ║",
-        f"║ Market Cap: ${market_cap:,.0f} ║",
-        f"║ 24h Change: {change:.2f}% ║",
-        f"║ 24h Volume: ${volume:,.0f} ║",
-        f"║ Volume Rating: {volume_rating} ║",
-        f"║ Source: {data['source'].title()} ║",
-        f"║ Chain: {data.get('extra', {}).get('chain', 'unknown').title()} ║"
+        "╔" + "═" * 60 + "╗",
+        create_line(f"{ticker} Analysis {sentiment}", 'center'),
+        "╠" + "═" * 60 + "╣",
+        create_line(f"Price: ${price_str}"),
+        create_line(f"Market Cap: ${market_cap:,.0f}"),
+        create_line(f"24h Change: {change:.2f}%"),
+        create_line(f"24h Volume: ${volume:,.0f}"),
+        create_line(f"Volume Rating: {volume_rating}"),
+        create_line(f"Chain: {data.get('extra', {}).get('chain', 'unknown').title()}")
     ]
     
-    # Add detailed analysis if available
+    # Add technical analysis if available
     if technical_analysis and not technical_analysis.get('error'):
-        chart.append(generate_detailed_analysis(data, technical_analysis))
+        ta = technical_analysis
+        
+        # Add separator
+        chart.extend([
+            "╠" + "═" * 60 + "╣",
+            create_line("Technical Analysis", 'center'),
+            "╟" + "─" * 60 + "╢"
+        ])
+        
+        # Add indicators
+        chart.extend([
+            create_line(f"RSI ({ta['rsi']['value']:.1f}): {ta['rsi']['condition']}"),
+            create_line(f"MACD: {ta['macd']['trend']}"),
+            create_line(f"Bollinger Bands: {ta['bollinger']['trend']}")
+        ])
+        
+        # Add prediction
+        pred = ta['prediction']
+        chart.extend([
+            "╟" + "─" * 60 + "╢",
+            create_line("Prediction Analysis", 'center'),
+            create_line(f"Direction: {pred['primary_trend']} ({pred['confidence']:.1f}% confidence)"),
+            create_line(f"Signal Strength: {pred['strength']}")
+        ])
+        
+        # Add detailed analysis
+        if ta['rsi']['value'] < 30:
+            chart.append(create_line("⚠️ Oversold conditions - Potential bounce"))
+        elif ta['rsi']['value'] > 70:
+            chart.append(create_line("⚠️ Overbought conditions - Potential pullback"))
+        
+        if ta['bollinger']['squeeze']:
+            chart.append(create_line("⚠️ Bollinger squeeze detected - Breakout imminent"))
+        
+        if ta['macd']['cross']:
+            cross_type = "bullish" if ta['macd']['trend'] == 'Bullish' else "bearish"
+            chart.append(create_line(f"⚠️ Recent {cross_type} MACD cross"))
+        
+        # Add volume analysis
+        if ta['volume']['ratio'] > 1.5:
+            chart.append(create_line("📊 High volume supporting the trend"))
+    
+    # Close the box
+    chart.append("╚" + "═" * 60 + "╝")
     
     return "\n".join(chart)
 
