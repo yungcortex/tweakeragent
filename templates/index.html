@@ -3,6 +3,13 @@
 <head>
     <title>TweakerAgent</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles_v2.css') }}">
+    <style>
+        .message-content {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-family: monospace;
+        }
+    </style>
 </head>
 <body>
     <div class="chat-container">
@@ -28,5 +35,30 @@
         </div>
     </div>
     <script src="{{ url_for('static', filename='main_v2.js') }}"></script>
+    <script>
+        async function sendMessage() {
+            const messageInput = document.getElementById('userInput');
+            const message = messageInput.value;
+            
+            try {
+                const response = await fetch('/process_message', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ message: message })
+                });
+                
+                const data = await response.json();
+                // Handle the response and update the UI
+                displayMessage(data);
+                
+            } catch (error) {
+                console.error('Error:', error);
+            }
+            
+            messageInput.value = '';
+        }
+    </script>
 </body>
 </html>
