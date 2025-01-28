@@ -11,7 +11,7 @@ import random
 import aiohttp
 import asyncio
 from web3 import Web3
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 import re
 from ta import momentum, trend, volatility
 
@@ -103,7 +103,7 @@ async def get_binance_data(session: aiohttp.ClientSession, symbol: str) -> Optio
     return None
 
 async def get_dexscreener_data(session: aiohttp.ClientSession, token_address: str) -> Optional[Dict[str, Any]]:
-    """Get data from DexScreener API with improved error handling"""
+    """Get data from DexScreener API with improved token info"""
     try:
         # For Solana addresses
         if len(token_address) > 32 and not token_address.startswith('0x'):
@@ -117,12 +117,14 @@ async def get_dexscreener_data(session: aiohttp.ClientSession, token_address: st
             if resp.status == 200:
                 data = await resp.json()
                 if data.get('pairs') and len(data['pairs']) > 0:
-                    # Sort pairs by liquidity
                     pairs = sorted(data['pairs'], 
                                  key=lambda x: float(x.get('liquidity', {}).get('usd', 0) or 0), 
                                  reverse=True)
                     
-                    pair = pairs[0]  # Get the most liquid pair
+                    pair = pairs[0]
+                    
+                    # Get historical data
+                    historical_data = await get_historical_data(session, token_address)
                     
                     return {
                         'price': float(pair.get('priceUsd', 0)),
@@ -133,7 +135,10 @@ async def get_dexscreener_data(session: aiohttp.ClientSession, token_address: st
                             'marketCap': float(pair.get('fdv', 0)),
                             'liquidity': float(pair.get('liquidity', {}).get('usd', 0)),
                             'dex': pair.get('dexId', 'unknown'),
-                            'chain': pair.get('chainId', 'unknown')
+                            'chain': pair.get('chainId', 'unknown'),
+                            'symbol': pair.get('baseToken', {}).get('symbol', 'UNKNOWN'),
+                            'name': pair.get('baseToken', {}).get('name', 'Unknown Token'),
+                            'historical': historical_data
                         }
                     }
     except Exception as e:
@@ -224,11 +229,33 @@ async def get_pumpfun_data(session: aiohttp.ClientSession, token_address: str) -
     return None
 
 def analyze_technical_indicators(price_history) -> Dict[str, Any]:
-    """Detailed technical analysis using ta library instead of talib"""
+    """Analyze technical indicators with error handling"""
     try:
+        if not price_history or len(price_history) < 20:
+            return {'error': 'Insufficient historical data'}
+            
         # Convert price history to pandas DataFrame
         df = pd.DataFrame(price_history)
-        df['price'] = df['price'].astype(float)
+        df['price'] = pd.to_numeric(df['price'], errors='coerce')
+        df = df.dropna()
+        
+        if len(df) < 20:
+            return {'error': 'Insufficient valid price data'}
+            
+        # Calculate indicators
+        prices = df['price'].values
+        
+        # RSI
+        rsi_indicator = momentum.RSIIndicator(df['price'])
+        rsi = rsi_indicator.rsi()
+        
+        # MACD
+        macd_indicator = trend.MACD(df['price'])
+        macd = macd_indicator.macd()
+        signal = macd_indicator.macd_signal()
+        
+        # Bollinger Bands
+        bollinger = volatility.BollingerBands(df['price'])
         
         # Calculate RSI
         rsi = momentum.RSIIndicator(df['price']).rsi()
@@ -338,7 +365,7 @@ def analyze_technical_indicators(price_history) -> Dict[str, Any]:
         return analysis
     except Exception as e:
         logger.error(f"Technical analysis error: {str(e)}")
-        return {'error': 'Unable to perform technical analysis'}
+        return {'error': f'Analysis error: {str(e)}'}
 
 def generate_detailed_analysis(data: Dict[str, Any], technical_analysis: Dict[str, Any]) -> str:
     """Generate detailed analysis and prediction text"""
@@ -762,17 +789,37 @@ async def get_raydium_data(session: aiohttp.ClientSession, token_address: str) -
         logger.error(f"Raydium API error: {str(e)}")
     return None
 
+async def get_historical_data(session: aiohttp.ClientSession, token_address: str) -> List[Dict]:
+    """Get historical price data from multiple sources"""
+    try:
+        # Try DexScreener first
+        url = f"{APIS['dexscreener']['url']}/dex/chart/{token_address}"
+        async with session.get(url) as resp:
+            if resp.status == 200:
+                data = await resp.json()
+                if data and isinstance(data, list):
+                    return [{'price': p['close'], 'timestamp': p['time']} for p in data]
+        
+        # Fallback to Birdeye for Solana tokens
+        if len(token_address) > 32 and not token_address.startswith('0x'):
+            url = f"{APIS['birdeye']['url']}/public/price/history?address={token_address}&type=1H"
+            headers = {'X-API-KEY': APIS['birdeye']['api_key']}
+            async with session.get(url, headers=headers) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    if data.get('data', {}).get('items'):
+                        return [{'price': float(p['value']), 'timestamp': p['unixTime']} 
+                               for p in data['data']['items']]
+    except Exception as e:
+        logger.error(f"Historical data error: {str(e)}")
+    return []
+
 async def get_token_data(token_id: str) -> Optional[Dict[str, Any]]:
-    """Get token data from multiple sources"""
+    """Get token data with improved error handling"""
     async with aiohttp.ClientSession() as session:
         results = []
         
-        # Try PumpFun first for new listings
-        pump_data = await get_pumpfun_data(session, token_id)
-        if pump_data:
-            results.append(pump_data)
-        
-        # Try DexScreener
+        # Try DexScreener first
         dex_data = await get_dexscreener_data(session, token_id)
         if dex_data:
             results.append(dex_data)
@@ -785,11 +832,18 @@ async def get_token_data(token_id: str) -> Optional[Dict[str, Any]]:
         
         # If we got any results, return the one with highest volume
         if results:
-            return max(results, 
-                      key=lambda x: float(x.get('volume_24h', 0)) if x.get('volume_24h') else 0)
+            best_result = max(results, 
+                            key=lambda x: float(x.get('volume_24h', 0)) if x.get('volume_24h') else 0)
+            
+            # Ensure we have historical data
+            if not best_result.get('extra', {}).get('historical'):
+                historical = await get_historical_data(session, token_id)
+                if historical:
+                    best_result.setdefault('extra', {})['historical'] = historical
+            
+            return best_result
         
-        # If no results, try CoinGecko as fallback
-        return await get_coingecko_data(session, token_id)
+        return None
 
 if __name__ == '__main__':
     app.run(debug=True)
