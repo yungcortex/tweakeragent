@@ -560,7 +560,7 @@ def get_random_response():
         "having another existential crisis... ask me about crypto instead...",
         "i only understand charts and emotional damage...",
         "my therapist says i should focus on crypto analysis...",
-        "that's beyond my psychological capacity right now...",
+        "that's beyond my pay grade and below my anxiety levels...",
         "sorry, too busy watching charts melt my sanity...",
         "can we talk about crypto instead? it's all i have left...",
         "processing... like my emotional baggage...",
@@ -866,30 +866,29 @@ async def get_token_data(token_id: str) -> Optional[Dict[str, Any]]:
             return None
 
 @bp.route('/analyze_token', methods=['POST'])
-@async_route
 async def analyze_token():
-    """Handle token analysis requests with better error handling"""
+    """Handle token analysis requests"""
     try:
         data = request.get_json()
-        if not data:
-            return jsonify({"error": "No data provided"}), 400
-            
         token_id = data.get('token_id', '').strip()
+        
         if not token_id:
             return jsonify({"error": "No token specified"}), 400
-            
-        logger.info(f"Analyzing token: {token_id}")
         
         token_data = await get_token_data(token_id)
         if not token_data:
             return jsonify({"error": f"Could not find data for token: {token_id}"}), 404
-            
-        logger.info(f"Token data retrieved: {token_data}")
+        
+        # Get historical data and analyze
+        if token_data.get('extra', {}).get('historical'):
+            analysis = analyze_technical_indicators(token_data['extra']['historical'])
+            token_data['analysis'] = analysis
+        
         return jsonify(token_data)
         
     except Exception as e:
         logger.error(f"Error analyzing token: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Analysis failed"}), 500
 
 # Register the blueprint with the app
 def init_app(app):
@@ -908,6 +907,24 @@ def not_found(e):
 @bp.errorhandler(500)
 def server_error(e):
     return jsonify({"error": "Internal server error"}), 500
+
+@bp.route('/process_message', methods=['POST'])
+async def process_message():
+    try:
+        data = request.get_json()
+        message = data.get('message', '').lower()
+        
+        # Handle SOL specifically
+        if 'sol' in message:
+            token_data = await get_token_data('sol')
+            if token_data:
+                return jsonify(token_data)
+        
+        return jsonify({"error": "Could not process message"}), 400
+        
+    except Exception as e:
+        logging.error(f"Error processing message: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     init_app(app)
