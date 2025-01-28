@@ -13,7 +13,7 @@ import asyncio
 from web3 import Web3
 from typing import Dict, Any, Optional
 import re
-import talib
+from ta import momentum, trend, volatility
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -224,44 +224,50 @@ async def get_pumpfun_data(session: aiohttp.ClientSession, token_address: str) -
     return None
 
 def analyze_technical_indicators(price_history) -> Dict[str, Any]:
-    """Detailed technical analysis for accurate price prediction"""
+    """Detailed technical analysis using ta library instead of talib"""
     try:
-        prices = np.array([float(p['price']) for p in price_history])
+        # Convert price history to pandas DataFrame
+        df = pd.DataFrame(price_history)
+        df['price'] = df['price'].astype(float)
         
         # Calculate RSI
-        rsi = talib.RSI(prices)
-        current_rsi = rsi[-1]
+        rsi = momentum.RSIIndicator(df['price']).rsi()
+        current_rsi = rsi.iloc[-1]
         rsi_trend = 'Bullish' if current_rsi > 50 else 'Bearish'
         
         # Calculate MACD
-        macd, signal, hist = talib.MACD(prices)
-        current_macd = macd[-1]
-        current_signal = signal[-1]
-        macd_cross = hist[-1] > 0 and hist[-2] < 0
+        macd = trend.MACD(df['price'])
+        current_macd = macd.macd().iloc[-1]
+        current_signal = macd.macd_signal().iloc[-1]
+        macd_hist = macd.macd_diff().iloc[-1]
+        macd_cross = macd_hist > 0 and macd.macd_diff().iloc[-2] < 0
         
         # Calculate Bollinger Bands
-        upper, middle, lower = talib.BBANDS(prices, timeperiod=20, nbdevup=2, nbdevdn=2)
-        current_price = prices[-1]
-        bb_position = (current_price - lower[-1]) / (upper[-1] - lower[-1]) * 100
+        bollinger = volatility.BollingerBands(df['price'])
+        current_price = df['price'].iloc[-1]
+        upper = bollinger.bollinger_hband().iloc[-1]
+        lower = bollinger.bollinger_lband().iloc[-1]
+        middle = bollinger.bollinger_mavg().iloc[-1]
+        bb_position = (current_price - lower) / (upper - lower) * 100 if upper != lower else 50
         
-        # Calculate multiple timeframe MAs
-        sma_5 = talib.SMA(prices, timeperiod=5)
-        sma_20 = talib.SMA(prices, timeperiod=20)
-        sma_50 = talib.SMA(prices, timeperiod=50)
+        # Calculate moving averages
+        sma_5 = df['price'].rolling(window=5).mean()
+        sma_20 = df['price'].rolling(window=20).mean()
+        sma_50 = df['price'].rolling(window=50).mean()
         
         # Volume analysis
-        volumes = np.array([float(p.get('volume', 0)) for p in price_history])
-        avg_volume = np.mean(volumes[-20:])
-        current_volume = volumes[-1]
+        volumes = df.get('volume', pd.Series([0] * len(df))).astype(float)
+        avg_volume = volumes.rolling(window=20).mean().iloc[-1]
+        current_volume = volumes.iloc[-1]
         volume_trend = current_volume > avg_volume
         
-        # Momentum indicators
-        momentum = talib.MOM(prices, timeperiod=14)
-        stoch_k, stoch_d = talib.STOCH(prices, prices, prices)
+        # Momentum
+        mom = momentum.ROCIndicator(df['price']).roc()
+        stoch = momentum.StochasticOscillator(df['price'], df['price'], df['price'])
         
         # Price trend analysis
-        short_trend = sma_5[-1] > sma_20[-1]
-        medium_trend = sma_20[-1] > sma_50[-1]
+        short_trend = sma_5.iloc[-1] > sma_20.iloc[-1]
+        medium_trend = sma_20.iloc[-1] > sma_50.iloc[-1]
         
         # Generate comprehensive analysis
         analysis = {
@@ -277,16 +283,16 @@ def analyze_technical_indicators(price_history) -> Dict[str, Any]:
             },
             'bollinger': {
                 'position': bb_position,
-                'squeeze': (upper[-1] - lower[-1]) / middle[-1] < 0.1,
-                'trend': 'Bullish' if current_price > middle[-1] else 'Bearish'
+                'squeeze': (upper - lower) / middle < 0.1,
+                'trend': 'Bullish' if current_price > middle else 'Bearish'
             },
             'momentum': {
-                'trend': 'Increasing' if momentum[-1] > 0 else 'Decreasing',
-                'strength': abs(momentum[-1])
+                'trend': 'Increasing' if mom.iloc[-1] > 0 else 'Decreasing',
+                'strength': abs(mom.iloc[-1])
             },
             'volume': {
                 'trend': 'Increasing' if volume_trend else 'Decreasing',
-                'ratio': current_volume / avg_volume
+                'ratio': current_volume / avg_volume if avg_volume > 0 else 1
             },
             'overall_trend': {
                 'short': 'Uptrend' if short_trend else 'Downtrend',
@@ -302,8 +308,8 @@ def analyze_technical_indicators(price_history) -> Dict[str, Any]:
             short_trend,
             medium_trend,
             volume_trend,
-            momentum[-1] > 0,
-            stoch_k[-1] < 20
+            mom.iloc[-1] > 0,
+            stoch.stoch().iloc[-1] < 20
         ])
         
         bearish_signals = sum([
@@ -313,8 +319,8 @@ def analyze_technical_indicators(price_history) -> Dict[str, Any]:
             not short_trend,
             not medium_trend,
             not volume_trend,
-            momentum[-1] < 0,
-            stoch_k[-1] > 80
+            mom.iloc[-1] < 0,
+            stoch.stoch().iloc[-1] > 80
         ])
         
         # Calculate prediction confidence
