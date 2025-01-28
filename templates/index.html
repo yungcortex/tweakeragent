@@ -30,16 +30,34 @@
             <!-- Messages will appear here -->
         </div>
         <div class="input-container">
-            <input type="text" id="userInput" placeholder="Type your message..." onkeypress="handleKeyPress(event)">
-            <button onclick="sendMessage()">Send</button>
+            <input type="text" id="message-input" placeholder="Type your message..." onkeypress="handleKeyPress(event)">
+            <button class="send-button">Send</button>
         </div>
     </div>
     <script src="{{ url_for('static', filename='main_v2.js') }}"></script>
     <script>
-        async function sendMessage() {
-            const messageInput = document.getElementById('userInput');
-            const message = messageInput.value;
-            
+        const messagesContainer = document.getElementById('messages');
+        const messageInput = document.getElementById('message-input');
+        const sendButton = document.querySelector('.send-button');
+
+        // Function to add a message to the chat
+        function addMessage(content, isUser = false) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${isUser ? 'user-message' : 'bot-message'}`;
+            messageDiv.textContent = content;
+            messagesContainer.appendChild(messageDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        // Function to handle sending messages
+        async function handleSendMessage() {
+            const message = messageInput.value.trim();
+            if (!message) return;
+
+            // Add user message to chat
+            addMessage(message, true);
+            messageInput.value = '';
+
             try {
                 const response = await fetch('/process_message', {
                     method: 'POST',
@@ -48,17 +66,41 @@
                     },
                     body: JSON.stringify({ message: message })
                 });
-                
+
                 const data = await response.json();
-                // Handle the response and update the UI
-                displayMessage(data);
                 
+                // Format and display the response
+                if (data.error) {
+                    addMessage(data.error);
+                } else {
+                    let responseText = `${data.name || 'Token'} Analysis 🚀\n\n`;
+                    responseText += `Price: $${data.price}\n`;
+                    responseText += `Market Cap: $${data.market_cap}\n`;
+                    responseText += `24h Change: ${data.change_24h}%\n`;
+                    responseText += `24h Volume: $${data.volume_24h}\n`;
+                    responseText += `Volume Rating: ${data.volume_rating} ✅\n`;
+                    responseText += `Chain: ${data.chain || 'Unknown'}`;
+
+                    addMessage(responseText);
+                }
             } catch (error) {
                 console.error('Error:', error);
+                addMessage('Sorry, there was an error processing your request.');
             }
-            
-            messageInput.value = '';
         }
+
+        // Event listeners
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                handleSendMessage();
+            }
+        });
+
+        sendButton.addEventListener('click', (e) => {
+            e.preventDefault();
+            handleSendMessage();
+        });
     </script>
 </body>
 </html>
