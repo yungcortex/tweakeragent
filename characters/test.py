@@ -886,5 +886,24 @@ async def analyze_token():
         logger.error(f"Error analyzing token: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
+# Register the blueprint with the app
+def init_app(app):
+    app.register_blueprint(bp)
+
+# Add a basic route to test if the API is working
+@bp.route('/health', methods=['GET'])
+def health_check():
+    return jsonify({"status": "ok"})
+
+# Add error handlers
+@bp.errorhandler(404)
+def not_found(e):
+    return jsonify({"error": "Not found"}), 404
+
+@bp.errorhandler(500)
+def server_error(e):
+    return jsonify({"error": "Internal server error"}), 500
+
 if __name__ == '__main__':
+    init_app(app)
     app.run(debug=True)
