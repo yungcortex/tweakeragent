@@ -241,43 +241,40 @@ async def get_pumpfun_data(session: aiohttp.ClientSession, token_address: str) -
     return None
 
 async def get_historical_data(session: aiohttp.ClientSession, token_address: str, chain: str = 'solana') -> List[Dict]:
-    """Get historical price data from multiple sources with improved reliability"""
+    """Get historical price data with improved reliability"""
     try:
-        historical_data = []
-        
-        # Try DexScreener first
-        dex_url = f"{APIS['dexscreener']['url']}/dex/pairs/{chain}/{token_address}"
-        async with session.get(dex_url) as resp:
-            if resp.status == 200:
-                data = await resp.json()
-                if data.get('pairs') and data['pairs'][0].get('priceHistory'):
-                    historical_data = [
-                        {'price': float(p['price']), 'timestamp': p['timestamp']}
-                        for p in data['pairs'][0]['priceHistory']
-                        if p.get('price')
-                    ]
-        
-        # If DexScreener didn't work, try Birdeye for Solana tokens
-        if not historical_data and chain == 'solana':
-            birdeye_url = f"{APIS['birdeye']['url']}/public/token_price/history?address={token_address}&type=1H&limit=168"  # 1 week of hourly data
-            headers = {'X-API-KEY': APIS['birdeye'].get('api_key', '')}
+        # For SOL, use Birdeye with specific parameters
+        if token_address == TOKEN_MAPPINGS['sol']['address']:
+            url = f"{APIS['birdeye']['url']}/public/price/history"
+            params = {
+                'address': token_address,
+                'type': '1H',  # 1 hour intervals
+                'limit': 168   # Last 7 days
+            }
+            headers = {'X-API-KEY': APIS['birdeye']['api_key']}
             
-            async with session.get(birdeye_url, headers=headers) as resp:
+            async with session.get(url, params=params, headers=headers) as resp:
                 if resp.status == 200:
                     data = await resp.json()
                     if data.get('data', {}).get('items'):
-                        historical_data = [
+                        return [
                             {'price': float(item['value']), 'timestamp': item['unixTime']}
                             for item in data['data']['items']
                             if item.get('value')
                         ]
         
-        # Sort by timestamp
-        if historical_data:
-            historical_data.sort(key=lambda x: x['timestamp'])
-            return historical_data
-            
-        logger.warning(f"No historical data found for {token_address}")
+        # For other tokens, try DexScreener
+        dex_url = f"{APIS['dexscreener']['url']}/dex/pairs/{chain}/{token_address}"
+        async with session.get(dex_url) as resp:
+            if resp.status == 200:
+                data = await resp.json()
+                if data.get('pairs') and data['pairs'][0].get('priceHistory'):
+                    return [
+                        {'price': float(p['price']), 'timestamp': p['timestamp']}
+                        for p in data['pairs'][0]['priceHistory']
+                        if p.get('price')
+                    ]
+        
         return []
         
     except Exception as e:
@@ -285,97 +282,48 @@ async def get_historical_data(session: aiohttp.ClientSession, token_address: str
         return []
 
 def analyze_technical_indicators(price_history) -> Dict[str, Any]:
-    """Enhanced technical analysis with better error handling and minimum data requirements"""
+    """Technical analysis with improved formatting"""
     try:
-        if not price_history:
-            return {'error': 'No historical data available'}
+        if not price_history or len(price_history) < 24:
+            return {'error': 'Insufficient historical data'}
             
-        # Convert to DataFrame
         df = pd.DataFrame(price_history)
         df['price'] = pd.to_numeric(df['price'], errors='coerce')
-        df = df.dropna()
+        df = df.dropna().sort_values('timestamp')
         
-        if len(df) < 24:  # Require at least 24 data points
-            return {'error': 'Insufficient price history for analysis'}
+        if len(df) < 24:
+            return {'error': 'Insufficient valid price data'}
         
-        prices = df['price'].values
+        # Calculate indicators
+        rsi = momentum.RSIIndicator(df['price'], window=14).rsi().iloc[-1]
+        macd = trend.MACD(df['price'])
+        bb = volatility.BollingerBands(df['price'])
         
-        # Calculate RSI
-        rsi_indicator = momentum.RSIIndicator(df['price'], window=14)
-        rsi = rsi_indicator.rsi().iloc[-1]
-        
-        # Calculate MACD
-        macd_indicator = trend.MACD(df['price'])
-        macd = macd_indicator.macd().iloc[-1]
-        signal = macd_indicator.macd_signal().iloc[-1]
-        hist = macd_indicator.macd_diff().iloc[-1]
-        
-        # Calculate Bollinger Bands
-        bb_indicator = volatility.BollingerBands(df['price'])
-        bb_upper = bb_indicator.bollinger_hband().iloc[-1]
-        bb_lower = bb_indicator.bollinger_lband().iloc[-1]
-        bb_middle = bb_indicator.bollinger_mavg().iloc[-1]
-        
-        current_price = prices[-1]
-        
-        # Enhanced analysis
         analysis = {
-            'rsi': {
-                'value': float(rsi),
-                'trend': 'Bullish' if rsi > 50 else 'Bearish',
-                'condition': 'Oversold' if rsi < 30 else 'Overbought' if rsi > 70 else 'Neutral'
+            'summary': {
+                'trend': 'Bullish' if df['price'].iloc[-1] > df['price'].iloc[-2] else 'Bearish',
+                'strength': 'Strong' if abs(rsi - 50) > 20 else 'Moderate',
+                'volatility': 'High' if df['price'].std() / df['price'].mean() > 0.1 else 'Low'
             },
-            'macd': {
-                'trend': 'Bullish' if macd > signal else 'Bearish',
-                'strength': abs(macd - signal),
-                'cross': (hist > 0 and hist > 0) != (prices[-2] > prices[-1])
-            },
-            'bollinger': {
-                'position': ((current_price - bb_lower) / (bb_upper - bb_lower) * 100),
-                'squeeze': (bb_upper - bb_lower) / bb_middle < 0.1,
-                'trend': 'Bullish' if current_price > bb_middle else 'Bearish'
-            },
-            'price_action': {
-                'trend': 'Uptrend' if prices[-1] > prices[-5] else 'Downtrend',
-                'volatility': np.std(prices[-24:]) / np.mean(prices[-24:]) * 100
+            'indicators': {
+                'rsi': float(rsi),
+                'macd': {
+                    'value': float(macd.macd().iloc[-1]),
+                    'signal': float(macd.macd_signal().iloc[-1])
+                },
+                'bollinger': {
+                    'upper': float(bb.bollinger_hband().iloc[-1]),
+                    'lower': float(bb.bollinger_lband().iloc[-1]),
+                    'middle': float(bb.bollinger_mavg().iloc[-1])
+                }
             }
-        }
-        
-        # Generate prediction
-        bullish_signals = sum([
-            rsi > 50,
-            macd > signal,
-            current_price > bb_middle,
-            prices[-1] > prices[-5],
-            rsi < 70,  # Not overbought
-            analysis['bollinger']['position'] < 80  # Not at BB top
-        ])
-        
-        bearish_signals = sum([
-            rsi < 50,
-            macd < signal,
-            current_price < bb_middle,
-            prices[-1] < prices[-5],
-            rsi > 30,  # Not oversold
-            analysis['bollinger']['position'] > 20  # Not at BB bottom
-        ])
-        
-        total_signals = 6
-        bull_confidence = (bullish_signals / total_signals) * 100
-        bear_confidence = (bearish_signals / total_signals) * 100
-        
-        analysis['prediction'] = {
-            'primary_trend': 'Bullish' if bull_confidence > bear_confidence else 'Bearish',
-            'confidence': max(bull_confidence, bear_confidence),
-            'signals': max(bullish_signals, bearish_signals),
-            'strength': 'Strong' if max(bull_confidence, bear_confidence) > 70 else 'Moderate' if max(bull_confidence, bear_confidence) > 50 else 'Weak'
         }
         
         return analysis
         
     except Exception as e:
-        logger.error(f"Technical analysis error: {str(e)}")
-        return {'error': f'Analysis error: {str(e)}'}
+        logger.error(f"Analysis error: {str(e)}")
+        return {'error': f'Analysis failed: {str(e)}'}
 
 def generate_detailed_analysis(data: Dict[str, Any], technical_analysis: Dict[str, Any]) -> str:
     """Generate detailed analysis and prediction text"""
@@ -796,46 +744,45 @@ async def get_raydium_data(session: aiohttp.ClientSession, token_address: str) -
     return None
 
 async def get_token_data(token_id: str) -> Optional[Dict[str, Any]]:
-    """Get token data with improved token resolution"""
+    """Get token data with improved error handling and data validation"""
     async with aiohttp.ClientSession() as session:
         try:
             # Normalize token_id
-            token_id = token_id.lower()
-            
-            # Check if it's a known token symbol
-            if token_id in TOKEN_MAPPINGS:
-                token_address = TOKEN_MAPPINGS[token_id]['address']
-            else:
-                token_address = token_id
+            token_id = token_id.lower().strip()
             
             # For SOL specifically
-            if token_id == 'sol':
-                # Try Birdeye first for SOL
-                birdeye_data = await get_birdeye_data(session, TOKEN_MAPPINGS['sol']['address'])
-                if birdeye_data:
-                    historical = await get_historical_data(session, TOKEN_MAPPINGS['sol']['address'], 'solana')
-                    if historical:
-                        birdeye_data.setdefault('extra', {})['historical'] = historical
-                    return birdeye_data
-                
-                # Fallback to DexScreener
-                dex_data = await get_dexscreener_data(session, TOKEN_MAPPINGS['sol']['address'])
-                if dex_data:
-                    return dex_data
+            if token_id in ['sol', 'solana']:
+                # Try CoinGecko first for accurate market cap
+                coingecko_data = await get_coingecko_data(session, 'solana')
+                if coingecko_data:
+                    # Get real-time price from Birdeye
+                    birdeye_data = await get_birdeye_data(session, TOKEN_MAPPINGS['sol']['address'])
+                    if birdeye_data:
+                        # Combine data from both sources
+                        return {
+                            'price': birdeye_data.get('price', coingecko_data.get('price')),
+                            'change_24h': birdeye_data.get('change_24h', coingecko_data.get('change_24h')),
+                            'volume_24h': birdeye_data.get('volume_24h', coingecko_data.get('volume_24h')),
+                            'market_cap': coingecko_data.get('market_cap', 0),
+                            'source': 'combined',
+                            'extra': {
+                                'historical': await get_historical_data(session, TOKEN_MAPPINGS['sol']['address'], 'solana')
+                            }
+                        }
             
-            # For other tokens
+            # For other tokens, try multiple sources
             results = []
             
-            # Try DexScreener
-            dex_data = await get_dexscreener_data(session, token_address)
-            if dex_data:
-                results.append(dex_data)
+            # Try CoinGecko
+            if token_id in TOKEN_MAPPINGS:
+                coingecko_data = await get_coingecko_data(session, TOKEN_MAPPINGS[token_id]['coingecko'])
+                if coingecko_data:
+                    results.append(coingecko_data)
             
             # Try Birdeye for Solana tokens
-            if len(token_address) > 32 and not token_address.startswith('0x'):
-                birdeye_data = await get_birdeye_data(session, token_address)
-                if birdeye_data:
-                    results.append(birdeye_data)
+            birdeye_data = await get_birdeye_data(session, token_id)
+            if birdeye_data:
+                results.append(birdeye_data)
             
             # Get the best result
             if results:
@@ -844,13 +791,17 @@ async def get_token_data(token_id: str) -> Optional[Dict[str, Any]]:
                 
                 # Ensure we have historical data
                 if not best_result.get('extra', {}).get('historical'):
-                    historical = await get_historical_data(session, token_address)
+                    historical = await get_historical_data(session, token_id)
                     if historical:
                         best_result.setdefault('extra', {})['historical'] = historical
+                        
+                        # Add technical analysis if we have historical data
+                        analysis = analyze_technical_indicators(historical)
+                        if not analysis.get('error'):
+                            best_result['analysis'] = analysis
                 
                 return best_result
             
-            logger.warning(f"No data found for token: {token_id}")
             return None
             
         except Exception as e:
