@@ -228,141 +228,139 @@ async def get_pumpfun_data(session: aiohttp.ClientSession, token_address: str) -
         logger.error(f"Pump.fun API error: {str(e)}")
     return None
 
-def analyze_technical_indicators(price_history) -> Dict[str, Any]:
-    """Analyze technical indicators with error handling"""
+async def get_historical_data(session: aiohttp.ClientSession, token_address: str, chain: str = 'solana') -> List[Dict]:
+    """Get historical price data from multiple sources with improved reliability"""
     try:
-        if not price_history or len(price_history) < 20:
-            return {'error': 'Insufficient historical data'}
+        historical_data = []
+        
+        # Try DexScreener first
+        dex_url = f"{APIS['dexscreener']['url']}/dex/pairs/{chain}/{token_address}"
+        async with session.get(dex_url) as resp:
+            if resp.status == 200:
+                data = await resp.json()
+                if data.get('pairs') and data['pairs'][0].get('priceHistory'):
+                    historical_data = [
+                        {'price': float(p['price']), 'timestamp': p['timestamp']}
+                        for p in data['pairs'][0]['priceHistory']
+                        if p.get('price')
+                    ]
+        
+        # If DexScreener didn't work, try Birdeye for Solana tokens
+        if not historical_data and chain == 'solana':
+            birdeye_url = f"{APIS['birdeye']['url']}/public/token_price/history?address={token_address}&type=1H&limit=168"  # 1 week of hourly data
+            headers = {'X-API-KEY': APIS['birdeye'].get('api_key', '')}
             
-        # Convert price history to pandas DataFrame
+            async with session.get(birdeye_url, headers=headers) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    if data.get('data', {}).get('items'):
+                        historical_data = [
+                            {'price': float(item['value']), 'timestamp': item['unixTime']}
+                            for item in data['data']['items']
+                            if item.get('value')
+                        ]
+        
+        # Sort by timestamp
+        if historical_data:
+            historical_data.sort(key=lambda x: x['timestamp'])
+            return historical_data
+            
+        logger.warning(f"No historical data found for {token_address}")
+        return []
+        
+    except Exception as e:
+        logger.error(f"Error fetching historical data: {str(e)}")
+        return []
+
+def analyze_technical_indicators(price_history) -> Dict[str, Any]:
+    """Enhanced technical analysis with better error handling and minimum data requirements"""
+    try:
+        if not price_history:
+            return {'error': 'No historical data available'}
+            
+        # Convert to DataFrame
         df = pd.DataFrame(price_history)
         df['price'] = pd.to_numeric(df['price'], errors='coerce')
         df = df.dropna()
         
-        if len(df) < 20:
-            return {'error': 'Insufficient valid price data'}
-            
-        # Calculate indicators
+        if len(df) < 24:  # Require at least 24 data points
+            return {'error': 'Insufficient price history for analysis'}
+        
         prices = df['price'].values
         
-        # RSI
-        rsi_indicator = momentum.RSIIndicator(df['price'])
-        rsi = rsi_indicator.rsi()
-        
-        # MACD
-        macd_indicator = trend.MACD(df['price'])
-        macd = macd_indicator.macd()
-        signal = macd_indicator.macd_signal()
-        
-        # Bollinger Bands
-        bollinger = volatility.BollingerBands(df['price'])
-        
         # Calculate RSI
-        rsi = momentum.RSIIndicator(df['price']).rsi()
-        current_rsi = rsi.iloc[-1]
-        rsi_trend = 'Bullish' if current_rsi > 50 else 'Bearish'
+        rsi_indicator = momentum.RSIIndicator(df['price'], window=14)
+        rsi = rsi_indicator.rsi().iloc[-1]
         
         # Calculate MACD
-        macd = trend.MACD(df['price'])
-        current_macd = macd.macd().iloc[-1]
-        current_signal = macd.macd_signal().iloc[-1]
-        macd_hist = macd.macd_diff().iloc[-1]
-        macd_cross = macd_hist > 0 and macd.macd_diff().iloc[-2] < 0
+        macd_indicator = trend.MACD(df['price'])
+        macd = macd_indicator.macd().iloc[-1]
+        signal = macd_indicator.macd_signal().iloc[-1]
+        hist = macd_indicator.macd_diff().iloc[-1]
         
         # Calculate Bollinger Bands
-        bollinger = volatility.BollingerBands(df['price'])
-        current_price = df['price'].iloc[-1]
-        upper = bollinger.bollinger_hband().iloc[-1]
-        lower = bollinger.bollinger_lband().iloc[-1]
-        middle = bollinger.bollinger_mavg().iloc[-1]
-        bb_position = (current_price - lower) / (upper - lower) * 100 if upper != lower else 50
+        bb_indicator = volatility.BollingerBands(df['price'])
+        bb_upper = bb_indicator.bollinger_hband().iloc[-1]
+        bb_lower = bb_indicator.bollinger_lband().iloc[-1]
+        bb_middle = bb_indicator.bollinger_mavg().iloc[-1]
         
-        # Calculate moving averages
-        sma_5 = df['price'].rolling(window=5).mean()
-        sma_20 = df['price'].rolling(window=20).mean()
-        sma_50 = df['price'].rolling(window=50).mean()
+        current_price = prices[-1]
         
-        # Volume analysis
-        volumes = df.get('volume', pd.Series([0] * len(df))).astype(float)
-        avg_volume = volumes.rolling(window=20).mean().iloc[-1]
-        current_volume = volumes.iloc[-1]
-        volume_trend = current_volume > avg_volume
-        
-        # Momentum
-        mom = momentum.ROCIndicator(df['price']).roc()
-        stoch = momentum.StochasticOscillator(df['price'], df['price'], df['price'])
-        
-        # Price trend analysis
-        short_trend = sma_5.iloc[-1] > sma_20.iloc[-1]
-        medium_trend = sma_20.iloc[-1] > sma_50.iloc[-1]
-        
-        # Generate comprehensive analysis
+        # Enhanced analysis
         analysis = {
             'rsi': {
-                'value': current_rsi,
-                'trend': rsi_trend,
-                'condition': 'Oversold' if current_rsi < 30 else 'Overbought' if current_rsi > 70 else 'Neutral'
+                'value': float(rsi),
+                'trend': 'Bullish' if rsi > 50 else 'Bearish',
+                'condition': 'Oversold' if rsi < 30 else 'Overbought' if rsi > 70 else 'Neutral'
             },
             'macd': {
-                'trend': 'Bullish' if current_macd > current_signal else 'Bearish',
-                'cross': macd_cross,
-                'strength': abs(current_macd - current_signal)
+                'trend': 'Bullish' if macd > signal else 'Bearish',
+                'strength': abs(macd - signal),
+                'cross': (hist > 0 and hist > 0) != (prices[-2] > prices[-1])
             },
             'bollinger': {
-                'position': bb_position,
-                'squeeze': (upper - lower) / middle < 0.1,
-                'trend': 'Bullish' if current_price > middle else 'Bearish'
+                'position': ((current_price - bb_lower) / (bb_upper - bb_lower) * 100),
+                'squeeze': (bb_upper - bb_lower) / bb_middle < 0.1,
+                'trend': 'Bullish' if current_price > bb_middle else 'Bearish'
             },
-            'momentum': {
-                'trend': 'Increasing' if mom.iloc[-1] > 0 else 'Decreasing',
-                'strength': abs(mom.iloc[-1])
-            },
-            'volume': {
-                'trend': 'Increasing' if volume_trend else 'Decreasing',
-                'ratio': current_volume / avg_volume if avg_volume > 0 else 1
-            },
-            'overall_trend': {
-                'short': 'Uptrend' if short_trend else 'Downtrend',
-                'medium': 'Uptrend' if medium_trend else 'Downtrend'
+            'price_action': {
+                'trend': 'Uptrend' if prices[-1] > prices[-5] else 'Downtrend',
+                'volatility': np.std(prices[-24:]) / np.mean(prices[-24:]) * 100
             }
         }
         
         # Generate prediction
         bullish_signals = sum([
-            current_rsi < 40,
-            current_macd > current_signal,
-            bb_position < 20,
-            short_trend,
-            medium_trend,
-            volume_trend,
-            mom.iloc[-1] > 0,
-            stoch.stoch().iloc[-1] < 20
+            rsi > 50,
+            macd > signal,
+            current_price > bb_middle,
+            prices[-1] > prices[-5],
+            rsi < 70,  # Not overbought
+            analysis['bollinger']['position'] < 80  # Not at BB top
         ])
         
         bearish_signals = sum([
-            current_rsi > 60,
-            current_macd < current_signal,
-            bb_position > 80,
-            not short_trend,
-            not medium_trend,
-            not volume_trend,
-            mom.iloc[-1] < 0,
-            stoch.stoch().iloc[-1] > 80
+            rsi < 50,
+            macd < signal,
+            current_price < bb_middle,
+            prices[-1] < prices[-5],
+            rsi > 30,  # Not oversold
+            analysis['bollinger']['position'] > 20  # Not at BB bottom
         ])
         
-        # Calculate prediction confidence
-        total_signals = 8
+        total_signals = 6
         bull_confidence = (bullish_signals / total_signals) * 100
         bear_confidence = (bearish_signals / total_signals) * 100
         
         analysis['prediction'] = {
             'primary_trend': 'Bullish' if bull_confidence > bear_confidence else 'Bearish',
             'confidence': max(bull_confidence, bear_confidence),
-            'signals': bullish_signals if bull_confidence > bear_confidence else bearish_signals,
+            'signals': max(bullish_signals, bearish_signals),
             'strength': 'Strong' if max(bull_confidence, bear_confidence) > 70 else 'Moderate' if max(bull_confidence, bear_confidence) > 50 else 'Weak'
         }
         
         return analysis
+        
     except Exception as e:
         logger.error(f"Technical analysis error: {str(e)}")
         return {'error': f'Analysis error: {str(e)}'}
@@ -381,11 +379,9 @@ def generate_detailed_analysis(data: Dict[str, Any], technical_analysis: Dict[st
         f"• RSI ({ta['rsi']['value']:.2f}): {ta['rsi']['condition']} - {ta['rsi']['trend']}",
         f"• MACD: {ta['macd']['trend']}{' (Recent Cross!)' if ta['macd']['cross'] else ''}",
         f"• Bollinger Bands: Price is at {ta['bollinger']['position']:.1f}% of the range",
-        f"• Volume: {ta['volume']['trend']} ({ta['volume']['ratio']:.1f}x average)",
-        f"• Momentum: {ta['momentum']['trend']} with {ta['momentum']['strength']:.2f} strength",
+        f"• Volume: {ta['volume_action']['trend']} with {ta['volume_action']['volatility']:.2f}% volatility",
         "\nTrend Analysis:",
-        f"• Short-term: {ta['overall_trend']['short']}",
-        f"• Medium-term: {ta['overall_trend']['medium']}",
+        f"• Price Action: {ta['price_action']['trend']}",
         "\nPrediction:",
         f"• Direction: {prediction['primary_trend']}",
         f"• Confidence: {prediction['confidence']:.1f}%",
@@ -393,7 +389,7 @@ def generate_detailed_analysis(data: Dict[str, Any], technical_analysis: Dict[st
         "\nTrading Signals:",
         "• " + ("Accumulation Zone" if ta['rsi']['value'] < 30 else "Distribution Zone" if ta['rsi']['value'] > 70 else "Neutral Zone"),
         "• " + ("Potential Breakout" if ta['bollinger']['squeeze'] else "Normal Volatility"),
-        "• Volume supports the trend" if ta['volume']['ratio'] > 1.5 else "Volume suggests caution"
+        "• Volume supports the trend" if ta['volume_action']['trend'] == 'Uptrend' else "Volume suggests caution"
     ]
     
     return "\n".join(analysis_text)
@@ -485,7 +481,7 @@ def generate_analysis_chart(data: Dict[str, Any]) -> str:
             chart.append(create_line(f"⚠️ Recent {cross_type} MACD cross"))
         
         # Add volume analysis
-        if ta['volume']['ratio'] > 1.5:
+        if ta['volume_action']['trend'] == 'Uptrend':
             chart.append(create_line("📊 High volume supporting the trend"))
     
     # Close the box
@@ -502,14 +498,14 @@ def generate_analysis_chart(data: Dict[str, Any]) -> str:
         ta = technical_analysis
         
         # Market structure analysis
-        if ta['overall_trend']['short'] == ta['overall_trend']['medium']:
+        if ta['price_action']['trend'] == 'Uptrend':
             trend_strength = "strong"
         else:
             trend_strength = "conflicting"
         
         analysis_text.extend([
-            f"• Market Structure: {trend_strength.title()} {ta['overall_trend']['short']}",
-            f"• Short-term trend is {ta['overall_trend']['short'].lower()}, medium-term trend is {ta['overall_trend']['medium'].lower()}"
+            f"• Market Structure: {trend_strength.title()} {ta['price_action']['trend']}",
+            f"• Price Action shows {ta['price_action']['trend'].lower()} momentum"
         ])
         
         # Technical indicator analysis
@@ -525,18 +521,16 @@ def generate_analysis_chart(data: Dict[str, Any]) -> str:
         
         # Volume analysis
         volume_analysis = []
-        if ta['volume']['ratio'] > 1.5:
+        if ta['volume_action']['trend'] == 'Uptrend':
             volume_analysis.append("High volume supporting the current move")
-        elif ta['volume']['ratio'] < 0.5:
-            volume_analysis.append("Low volume suggesting weak conviction")
         else:
-            volume_analysis.append("Average volume indicating normal market activity")
+            volume_analysis.append("Low volume suggesting weak conviction")
         
         analysis_text.extend([
             "",
             "📈 Volume Analysis:",
             f"• {volume_analysis[0]}",
-            f"• Volume is {ta['volume']['ratio']:.1f}x the average"
+            f"• Volatility: {ta['volume_action']['volatility']:.2f}%"
         ])
         
         # Price prediction
@@ -551,7 +545,7 @@ def generate_analysis_chart(data: Dict[str, Any]) -> str:
             "",
             "🎯 Price Prediction:",
             f"• {pred['primary_trend']} bias with {confidence_desc} confidence ({pred['confidence']:.1f}%)",
-            f"• {pred['signals']} out of 8 technical signals confirm this direction"
+            f"• {pred['signals']} out of 6 technical signals confirm this direction"
         ])
         
         # Key levels and warnings
@@ -788,31 +782,6 @@ async def get_raydium_data(session: aiohttp.ClientSession, token_address: str) -
     except Exception as e:
         logger.error(f"Raydium API error: {str(e)}")
     return None
-
-async def get_historical_data(session: aiohttp.ClientSession, token_address: str) -> List[Dict]:
-    """Get historical price data from multiple sources"""
-    try:
-        # Try DexScreener first
-        url = f"{APIS['dexscreener']['url']}/dex/chart/{token_address}"
-        async with session.get(url) as resp:
-            if resp.status == 200:
-                data = await resp.json()
-                if data and isinstance(data, list):
-                    return [{'price': p['close'], 'timestamp': p['time']} for p in data]
-        
-        # Fallback to Birdeye for Solana tokens
-        if len(token_address) > 32 and not token_address.startswith('0x'):
-            url = f"{APIS['birdeye']['url']}/public/price/history?address={token_address}&type=1H"
-            headers = {'X-API-KEY': APIS['birdeye']['api_key']}
-            async with session.get(url, headers=headers) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    if data.get('data', {}).get('items'):
-                        return [{'price': float(p['value']), 'timestamp': p['unixTime']} 
-                               for p in data['data']['items']]
-    except Exception as e:
-        logger.error(f"Historical data error: {str(e)}")
-    return []
 
 async def get_token_data(token_id: str) -> Optional[Dict[str, Any]]:
     """Get token data with improved error handling"""
