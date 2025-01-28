@@ -15,6 +15,8 @@ from typing import Dict, Any, Optional, List
 import re
 from ta import momentum, trend, volatility
 from functools import wraps
+from os import getenv
+from dotenv import load_dotenv
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -35,6 +37,9 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 character_path = os.path.join(os.path.dirname(__file__), 'tweaker.character.json')
 with open(character_path, 'r') as f:
     CHARACTER = json.load(f)
+
+# Load environment variables
+load_dotenv()
 
 # API endpoints and configurations
 APIS = {
@@ -69,7 +74,7 @@ APIS = {
     'birdeye': {
         'url': "https://public-api.birdeye.so",
         'timeout': 10,
-        'api_key': 'b778bc1236344299ac5f2e6b5b2e164e'  # Replace with your actual API key
+        'api_key': getenv('BIRDEYE_API_KEY', 'your_api_key_here')  # Replace with your actual key if not using env vars
     },
 }
 
