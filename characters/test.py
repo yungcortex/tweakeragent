@@ -240,40 +240,40 @@ async def get_pumpfun_data(session: aiohttp.ClientSession, token_address: str) -
         logger.error(f"Pump.fun API error: {str(e)}")
     return None
 
-async def get_historical_data(session: aiohttp.ClientSession, token_address: str, chain: str = 'solana') -> List[Dict]:
-    """Get historical price data with improved reliability"""
+async def get_historical_data(session: aiohttp.ClientSession, token_address: str) -> List[Dict]:
+    """Get comprehensive historical price data"""
     try:
-        # For SOL, use Birdeye with specific parameters
-        if token_address == TOKEN_MAPPINGS['sol']['address']:
+        headers = {'X-API-KEY': APIS['birdeye']['api_key']}
+        
+        # Get multiple timeframes for better analysis
+        timeframes = [
+            ('1H', 168),   # 1 week of hourly data
+            ('1D', 30),    # 30 days of daily data
+        ]
+        
+        historical_data = []
+        for timeframe, limit in timeframes:
             url = f"{APIS['birdeye']['url']}/public/price/history"
             params = {
                 'address': token_address,
-                'type': '1H',  # 1 hour intervals
-                'limit': 168   # Last 7 days
+                'type': timeframe,
+                'limit': limit
             }
-            headers = {'X-API-KEY': APIS['birdeye']['api_key']}
             
             async with session.get(url, params=params, headers=headers) as resp:
                 if resp.status == 200:
                     data = await resp.json()
                     if data.get('data', {}).get('items'):
-                        return [
+                        historical_data.extend([
                             {'price': float(item['value']), 'timestamp': item['unixTime']}
                             for item in data['data']['items']
                             if item.get('value')
-                        ]
+                        ])
         
-        # For other tokens, try DexScreener
-        dex_url = f"{APIS['dexscreener']['url']}/dex/pairs/{chain}/{token_address}"
-        async with session.get(dex_url) as resp:
-            if resp.status == 200:
-                data = await resp.json()
-                if data.get('pairs') and data['pairs'][0].get('priceHistory'):
-                    return [
-                        {'price': float(p['price']), 'timestamp': p['timestamp']}
-                        for p in data['pairs'][0]['priceHistory']
-                        if p.get('price')
-                    ]
+        # Sort and remove duplicates
+        if historical_data:
+            df = pd.DataFrame(historical_data).drop_duplicates('timestamp').sort_values('timestamp')
+            return df.to_dict('records')
         
         return []
         
@@ -282,44 +282,77 @@ async def get_historical_data(session: aiohttp.ClientSession, token_address: str
         return []
 
 def analyze_technical_indicators(price_history) -> Dict[str, Any]:
-    """Technical analysis with improved formatting"""
+    """Enhanced technical analysis with predictions"""
     try:
-        if not price_history or len(price_history) < 24:
-            return {'error': 'Insufficient historical data'}
+        if not price_history:
+            return {'error': 'No historical data available'}
             
         df = pd.DataFrame(price_history)
         df['price'] = pd.to_numeric(df['price'], errors='coerce')
         df = df.dropna().sort_values('timestamp')
         
-        if len(df) < 24:
-            return {'error': 'Insufficient valid price data'}
+        if len(df) < 20:
+            return {'error': 'Insufficient price history for analysis'}
         
-        # Calculate indicators
+        # Calculate technical indicators
         rsi = momentum.RSIIndicator(df['price'], window=14).rsi().iloc[-1]
         macd = trend.MACD(df['price'])
+        macd_line = macd.macd().iloc[-1]
+        signal_line = macd.macd_signal().iloc[-1]
         bb = volatility.BollingerBands(df['price'])
+        current_price = df['price'].iloc[-1]
         
-        analysis = {
+        # Trend Analysis
+        short_sma = df['price'].rolling(window=20).mean().iloc[-1]
+        long_sma = df['price'].rolling(window=50).mean().iloc[-1]
+        price_trend = 'Bullish' if short_sma > long_sma else 'Bearish'
+        
+        # Momentum Analysis
+        momentum_signals = {
+            'rsi_bullish': rsi > 50,
+            'macd_bullish': macd_line > signal_line,
+            'price_above_sma': current_price > short_sma,
+            'volume_trend': df['price'].diff().abs().mean() > df['price'].diff().abs().rolling(20).mean().iloc[-1]
+        }
+        
+        bullish_count = sum(momentum_signals.values())
+        bearish_count = len(momentum_signals) - bullish_count
+        
+        # Generate prediction
+        confidence = (max(bullish_count, bearish_count) / len(momentum_signals)) * 100
+        prediction = {
+            'direction': 'Bullish' if bullish_count > bearish_count else 'Bearish',
+            'confidence': confidence,
+            'strength': 'Strong' if confidence > 75 else 'Moderate' if confidence > 50 else 'Weak',
+            'target_price': current_price * (1.1 if bullish_count > bearish_count else 0.9)
+        }
+        
+        return {
             'summary': {
-                'trend': 'Bullish' if df['price'].iloc[-1] > df['price'].iloc[-2] else 'Bearish',
-                'strength': 'Strong' if abs(rsi - 50) > 20 else 'Moderate',
-                'volatility': 'High' if df['price'].std() / df['price'].mean() > 0.1 else 'Low'
+                'trend': price_trend,
+                'momentum': 'Bullish' if bullish_count > bearish_count else 'Bearish',
+                'strength': prediction['strength']
             },
             'indicators': {
                 'rsi': float(rsi),
                 'macd': {
-                    'value': float(macd.macd().iloc[-1]),
-                    'signal': float(macd.macd_signal().iloc[-1])
+                    'value': float(macd_line),
+                    'signal': float(signal_line),
+                    'histogram': float(macd_line - signal_line)
                 },
-                'bollinger': {
+                'moving_averages': {
+                    'sma20': float(short_sma),
+                    'sma50': float(long_sma)
+                },
+                'bollinger_bands': {
                     'upper': float(bb.bollinger_hband().iloc[-1]),
-                    'lower': float(bb.bollinger_lband().iloc[-1]),
-                    'middle': float(bb.bollinger_mavg().iloc[-1])
+                    'middle': float(bb.bollinger_mavg().iloc[-1]),
+                    'lower': float(bb.bollinger_lband().iloc[-1])
                 }
-            }
+            },
+            'prediction': prediction,
+            'signals': momentum_signals
         }
-        
-        return analysis
         
     except Exception as e:
         logger.error(f"Analysis error: {str(e)}")
@@ -667,34 +700,52 @@ def after_request(response):
     return response
 
 async def get_birdeye_data(session: aiohttp.ClientSession, token_address: str) -> Optional[Dict[str, Any]]:
-    """Get data from Birdeye API"""
+    """Get data from Birdeye API with improved market cap calculation"""
     try:
-        url = f"{APIS['birdeye']['url']}/public/token_list?chain=solana"
+        # Get token info first for supply data
+        info_url = f"{APIS['birdeye']['url']}/public/token_list/token_meta"
+        params = {'token_address': token_address}
         headers = {'X-API-KEY': APIS['birdeye']['api_key']}
         
-        async with session.get(url, headers=headers) as resp:
+        async with session.get(info_url, params=params, headers=headers) as resp:
             if resp.status == 200:
-                data = await resp.json()
-                if data.get('success') and data.get('data', {}).get('tokens'):
-                    token = next((t for t in data['data']['tokens'] 
-                                if t.get('address') == token_address), None)
-                    if token:
-                        price_url = f"{APIS['birdeye']['url']}/public/price?address={token_address}"
-                        async with session.get(price_url, headers=headers) as price_resp:
-                            if price_resp.status == 200:
-                                price_data = await price_resp.json()
-                                if price_data.get('data'):
-                                    return {
-                                        'price': float(price_data['data'].get('value', 0)),
-                                        'change_24h': float(price_data['data'].get('priceChange24h', 0)),
-                                        'volume_24h': float(price_data['data'].get('volume24h', 0)),
-                                        'source': 'birdeye',
-                                        'extra': {
-                                            'chain': 'solana',
-                                            'symbol': token.get('symbol', ''),
-                                            'name': token.get('name', '')
-                                        }
-                                    }
+                info_data = await resp.json()
+                token_info = info_data.get('data', {}).get(token_address, {})
+                supply = float(token_info.get('supply', 0))
+
+        # Get price data
+        price_url = f"{APIS['birdeye']['url']}/public/price"
+        params = {'address': token_address}
+        
+        async with session.get(price_url, params=params, headers=headers) as resp:
+            if resp.status == 200:
+                price_data = await resp.json()
+                if price_data.get('data', {}).get('value'):
+                    price = float(price_data['data']['value'])
+                    
+                    # Get 24h data
+                    change_url = f"{APIS['birdeye']['url']}/public/token_price/24h_change"
+                    async with session.get(change_url, params=params, headers=headers) as change_resp:
+                        change_data = await change_resp.json()
+                        change_24h = float(change_data.get('data', {}).get(token_address, 0))
+
+                    # Get volume data
+                    volume_url = f"{APIS['birdeye']['url']}/public/token_price/24h_volume"
+                    async with session.get(volume_url, params=params, headers=headers) as vol_resp:
+                        volume_data = await vol_resp.json()
+                        volume_24h = float(volume_data.get('data', {}).get(token_address, 0))
+
+                    return {
+                        'price': price,
+                        'change_24h': change_24h,
+                        'volume_24h': volume_24h,
+                        'market_cap': price * supply if supply > 0 else 0,
+                        'source': 'birdeye',
+                        'extra': {
+                            'chain': 'solana',
+                            'historical': await get_historical_data(session, token_address)
+                        }
+                    }
     except Exception as e:
         logger.error(f"Birdeye API error: {str(e)}")
     return None
@@ -766,7 +817,7 @@ async def get_token_data(token_id: str) -> Optional[Dict[str, Any]]:
                             'market_cap': coingecko_data.get('market_cap', 0),
                             'source': 'combined',
                             'extra': {
-                                'historical': await get_historical_data(session, TOKEN_MAPPINGS['sol']['address'], 'solana')
+                                'historical': await get_historical_data(session, TOKEN_MAPPINGS['sol']['address'])
                             }
                         }
             
