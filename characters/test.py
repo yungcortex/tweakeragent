@@ -14,6 +14,7 @@ from web3 import Web3
 from typing import Dict, Any, Optional, List
 import re
 from ta import momentum, trend, volatility
+from functools import wraps
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -86,6 +87,13 @@ TOKEN_MAPPINGS = {
     'doge': {'coingecko': 'dogecoin', 'defillama': 'dogecoin'},
     # Add more mappings
 }
+
+# Helper for async routes
+def async_route(f):
+    @wraps(f)
+    def wrapped(*args, **kwargs):
+        return asyncio.run(f(*args, **kwargs))
+    return wrapped
 
 async def get_binance_data(session: aiohttp.ClientSession, symbol: str) -> Optional[Dict[str, Any]]:
     """Get data from Binance"""
@@ -850,6 +858,7 @@ async def get_token_data(token_id: str) -> Optional[Dict[str, Any]]:
             return None
 
 @bp.route('/analyze_token', methods=['POST'])
+@async_route
 async def analyze_token():
     """Handle token analysis requests"""
     try:
