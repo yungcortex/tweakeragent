@@ -241,42 +241,28 @@ async def get_pumpfun_data(session: aiohttp.ClientSession, token_address: str) -
     return None
 
 async def get_historical_data(session: aiohttp.ClientSession, token_address: str) -> List[Dict]:
-    """Get comprehensive historical price data"""
+    """Get historical price data"""
     try:
         headers = {'X-API-KEY': APIS['birdeye']['api_key']}
+        url = f"{APIS['birdeye']['url']}/public/price/history"
         
-        # Get multiple timeframes for better analysis
-        timeframes = [
-            ('1H', 168),   # 1 week of hourly data
-            ('1D', 30),    # 30 days of daily data
-        ]
+        # Get hourly data for the last week
+        params = {
+            'address': token_address,
+            'type': '1H',
+            'limit': 168  # 7 days * 24 hours
+        }
         
-        historical_data = []
-        for timeframe, limit in timeframes:
-            url = f"{APIS['birdeye']['url']}/public/price/history"
-            params = {
-                'address': token_address,
-                'type': timeframe,
-                'limit': limit
-            }
-            
-            async with session.get(url, params=params, headers=headers) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    if data.get('data', {}).get('items'):
-                        historical_data.extend([
-                            {'price': float(item['value']), 'timestamp': item['unixTime']}
-                            for item in data['data']['items']
-                            if item.get('value')
-                        ])
-        
-        # Sort and remove duplicates
-        if historical_data:
-            df = pd.DataFrame(historical_data).drop_duplicates('timestamp').sort_values('timestamp')
-            return df.to_dict('records')
-        
+        async with session.get(url, params=params, headers=headers) as resp:
+            if resp.status == 200:
+                data = await resp.json()
+                if data.get('data', {}).get('items'):
+                    return [
+                        {'price': float(item['value']), 'timestamp': item['unixTime']}
+                        for item in data['data']['items']
+                        if item.get('value')
+                    ]
         return []
-        
     except Exception as e:
         logger.error(f"Error fetching historical data: {str(e)}")
         return []
@@ -795,64 +781,60 @@ async def get_raydium_data(session: aiohttp.ClientSession, token_address: str) -
     return None
 
 async def get_token_data(token_id: str) -> Optional[Dict[str, Any]]:
-    """Get token data with improved error handling and data validation"""
+    """Get comprehensive token data"""
     async with aiohttp.ClientSession() as session:
         try:
-            # Normalize token_id
             token_id = token_id.lower().strip()
             
             # For SOL specifically
             if token_id in ['sol', 'solana']:
-                # Try CoinGecko first for accurate market cap
-                coingecko_data = await get_coingecko_data(session, 'solana')
-                if coingecko_data:
-                    # Get real-time price from Birdeye
-                    birdeye_data = await get_birdeye_data(session, TOKEN_MAPPINGS['sol']['address'])
-                    if birdeye_data:
-                        # Combine data from both sources
-                        return {
-                            'price': birdeye_data.get('price', coingecko_data.get('price')),
-                            'change_24h': birdeye_data.get('change_24h', coingecko_data.get('change_24h')),
-                            'volume_24h': birdeye_data.get('volume_24h', coingecko_data.get('volume_24h')),
-                            'market_cap': coingecko_data.get('market_cap', 0),
-                            'source': 'combined',
-                            'extra': {
-                                'historical': await get_historical_data(session, TOKEN_MAPPINGS['sol']['address'])
-                            }
+                # Get Birdeye data first
+                birdeye_data = await get_birdeye_data(session, TOKEN_MAPPINGS['sol']['address'])
+                if birdeye_data:
+                    # Get CoinGecko data for additional info
+                    coingecko_data = await get_coingecko_data(session, 'solana')
+                    return {
+                        'name': 'Solana',
+                        'symbol': 'SOL',
+                        'price': birdeye_data.get('price'),
+                        'change_24h': birdeye_data.get('change_24h', 0),
+                        'volume_24h': birdeye_data.get('volume_24h', 0),
+                        'market_cap': coingecko_data.get('market_cap') if coingecko_data else birdeye_data.get('market_cap', 0),
+                        'chain': 'Solana',
+                        'extra': {
+                            'historical': await get_historical_data(session, TOKEN_MAPPINGS['sol']['address'])
                         }
+                    }
+
+            # Try Birdeye for token info
+            token_info_url = f"{APIS['birdeye']['url']}/public/token_list/token_meta"
+            headers = {'X-API-KEY': APIS['birdeye']['api_key']}
+            params = {'token_address': token_id}
             
-            # For other tokens, try multiple sources
-            results = []
-            
-            # Try CoinGecko
-            if token_id in TOKEN_MAPPINGS:
-                coingecko_data = await get_coingecko_data(session, TOKEN_MAPPINGS[token_id]['coingecko'])
-                if coingecko_data:
-                    results.append(coingecko_data)
-            
-            # Try Birdeye for Solana tokens
-            birdeye_data = await get_birdeye_data(session, token_id)
-            if birdeye_data:
-                results.append(birdeye_data)
-            
-            # Get the best result
-            if results:
-                best_result = max(results, 
-                                key=lambda x: float(x.get('volume_24h', 0)) if x.get('volume_24h') else 0)
-                
-                # Ensure we have historical data
-                if not best_result.get('extra', {}).get('historical'):
-                    historical = await get_historical_data(session, token_id)
-                    if historical:
-                        best_result.setdefault('extra', {})['historical'] = historical
-                        
-                        # Add technical analysis if we have historical data
-                        analysis = analyze_technical_indicators(historical)
-                        if not analysis.get('error'):
-                            best_result['analysis'] = analysis
-                
-                return best_result
-            
+            async with session.get(token_info_url, params=params, headers=headers) as resp:
+                if resp.status == 200:
+                    info_data = await resp.json()
+                    token_info = info_data.get('data', {}).get(token_id, {})
+                    
+                    if token_info:
+                        # Get price and market data
+                        birdeye_data = await get_birdeye_data(session, token_id)
+                        if birdeye_data:
+                            return {
+                                'name': token_info.get('symbol', 'Unknown'),  # Use symbol as name if name not available
+                                'symbol': token_info.get('symbol', 'Unknown'),
+                                'price': birdeye_data.get('price'),
+                                'change_24h': birdeye_data.get('change_24h', 0),
+                                'volume_24h': birdeye_data.get('volume_24h', 0),
+                                'market_cap': birdeye_data.get('market_cap', 
+                                    float(token_info.get('supply', 0)) * birdeye_data.get('price', 0)),
+                                'chain': 'Solana',
+                                'extra': {
+                                    'historical': await get_historical_data(session, token_id)
+                                }
+                            }
+
+            logger.warning(f"No data found for token: {token_id}")
             return None
             
         except Exception as e:
@@ -875,9 +857,11 @@ async def analyze_token():
             return jsonify({"error": f"Could not find data for token: {token_id}"}), 404
         
         # Get historical data and analyze
-        if token_data.get('extra', {}).get('historical'):
-            analysis = analyze_technical_indicators(token_data['extra']['historical'])
-            token_data['analysis'] = analysis
+        historical_data = token_data.get('extra', {}).get('historical', [])
+        if historical_data:
+            analysis = analyze_technical_indicators(historical_data)
+            if not analysis.get('error'):
+                token_data['analysis'] = analysis
         
         return jsonify(token_data)
         
