@@ -224,64 +224,154 @@ async def get_pumpfun_data(session: aiohttp.ClientSession, token_address: str) -
     return None
 
 def analyze_technical_indicators(price_history) -> Dict[str, Any]:
-    """Analyze technical indicators for price prediction"""
+    """Detailed technical analysis for accurate price prediction"""
     try:
         prices = np.array([float(p['price']) for p in price_history])
         
         # Calculate RSI
         rsi = talib.RSI(prices)
         current_rsi = rsi[-1]
+        rsi_trend = 'Bullish' if current_rsi > 50 else 'Bearish'
         
         # Calculate MACD
         macd, signal, hist = talib.MACD(prices)
         current_macd = macd[-1]
         current_signal = signal[-1]
+        macd_cross = hist[-1] > 0 and hist[-2] < 0
         
         # Calculate Bollinger Bands
-        upper, middle, lower = talib.BBANDS(prices)
-        current_upper = upper[-1]
-        current_middle = middle[-1]
-        current_lower = lower[-1]
+        upper, middle, lower = talib.BBANDS(prices, timeperiod=20, nbdevup=2, nbdevdn=2)
+        current_price = prices[-1]
+        bb_position = (current_price - lower[-1]) / (upper[-1] - lower[-1]) * 100
         
-        # Simple trend analysis
-        short_ma = talib.SMA(prices, timeperiod=5)
-        long_ma = talib.SMA(prices, timeperiod=20)
+        # Calculate multiple timeframe MAs
+        sma_5 = talib.SMA(prices, timeperiod=5)
+        sma_20 = talib.SMA(prices, timeperiod=20)
+        sma_50 = talib.SMA(prices, timeperiod=50)
         
-        # Determine market conditions
-        is_oversold = current_rsi < 30
-        is_overbought = current_rsi > 70
-        macd_bullish = current_macd > current_signal
-        price_above_ma = prices[-1] > long_ma[-1]
-        bb_squeeze = (current_upper - current_lower) / current_middle < 0.1
+        # Volume analysis
+        volumes = np.array([float(p.get('volume', 0)) for p in price_history])
+        avg_volume = np.mean(volumes[-20:])
+        current_volume = volumes[-1]
+        volume_trend = current_volume > avg_volume
         
-        # Generate analysis
+        # Momentum indicators
+        momentum = talib.MOM(prices, timeperiod=14)
+        stoch_k, stoch_d = talib.STOCH(prices, prices, prices)
+        
+        # Price trend analysis
+        short_trend = sma_5[-1] > sma_20[-1]
+        medium_trend = sma_20[-1] > sma_50[-1]
+        
+        # Generate comprehensive analysis
         analysis = {
-            'rsi': current_rsi,
-            'macd_trend': 'Bullish' if macd_bullish else 'Bearish',
-            'bb_position': 'Squeeze' if bb_squeeze else 'Normal',
-            'trend': 'Uptrend' if price_above_ma else 'Downtrend',
-            'signals': []
+            'rsi': {
+                'value': current_rsi,
+                'trend': rsi_trend,
+                'condition': 'Oversold' if current_rsi < 30 else 'Overbought' if current_rsi > 70 else 'Neutral'
+            },
+            'macd': {
+                'trend': 'Bullish' if current_macd > current_signal else 'Bearish',
+                'cross': macd_cross,
+                'strength': abs(current_macd - current_signal)
+            },
+            'bollinger': {
+                'position': bb_position,
+                'squeeze': (upper[-1] - lower[-1]) / middle[-1] < 0.1,
+                'trend': 'Bullish' if current_price > middle[-1] else 'Bearish'
+            },
+            'momentum': {
+                'trend': 'Increasing' if momentum[-1] > 0 else 'Decreasing',
+                'strength': abs(momentum[-1])
+            },
+            'volume': {
+                'trend': 'Increasing' if volume_trend else 'Decreasing',
+                'ratio': current_volume / avg_volume
+            },
+            'overall_trend': {
+                'short': 'Uptrend' if short_trend else 'Downtrend',
+                'medium': 'Uptrend' if medium_trend else 'Downtrend'
+            }
         }
         
-        # Generate trading signals
-        if is_oversold and macd_bullish:
-            analysis['signals'].append('Strong Buy Signal')
-        elif is_overbought and not macd_bullish:
-            analysis['signals'].append('Consider Taking Profits')
-        elif bb_squeeze:
-            analysis['signals'].append('Potential Breakout Incoming')
+        # Generate prediction
+        bullish_signals = sum([
+            current_rsi < 40,
+            current_macd > current_signal,
+            bb_position < 20,
+            short_trend,
+            medium_trend,
+            volume_trend,
+            momentum[-1] > 0,
+            stoch_k[-1] < 20
+        ])
+        
+        bearish_signals = sum([
+            current_rsi > 60,
+            current_macd < current_signal,
+            bb_position > 80,
+            not short_trend,
+            not medium_trend,
+            not volume_trend,
+            momentum[-1] < 0,
+            stoch_k[-1] > 80
+        ])
+        
+        # Calculate prediction confidence
+        total_signals = 8
+        bull_confidence = (bullish_signals / total_signals) * 100
+        bear_confidence = (bearish_signals / total_signals) * 100
+        
+        analysis['prediction'] = {
+            'primary_trend': 'Bullish' if bull_confidence > bear_confidence else 'Bearish',
+            'confidence': max(bull_confidence, bear_confidence),
+            'signals': bullish_signals if bull_confidence > bear_confidence else bearish_signals,
+            'strength': 'Strong' if max(bull_confidence, bear_confidence) > 70 else 'Moderate' if max(bull_confidence, bear_confidence) > 50 else 'Weak'
+        }
         
         return analysis
     except Exception as e:
         logger.error(f"Technical analysis error: {str(e)}")
         return {'error': 'Unable to perform technical analysis'}
 
+def generate_detailed_analysis(data: Dict[str, Any], technical_analysis: Dict[str, Any]) -> str:
+    """Generate detailed analysis and prediction text"""
+    if technical_analysis.get('error'):
+        return "Insufficient data for detailed analysis"
+    
+    ta = technical_analysis
+    prediction = ta['prediction']
+    
+    analysis_text = [
+        "\n║ Detailed Market Analysis ║",
+        f"Technical Indicators:",
+        f"• RSI ({ta['rsi']['value']:.2f}): {ta['rsi']['condition']} - {ta['rsi']['trend']}",
+        f"• MACD: {ta['macd']['trend']}{' (Recent Cross!)' if ta['macd']['cross'] else ''}",
+        f"• Bollinger Bands: Price is at {ta['bollinger']['position']:.1f}% of the range",
+        f"• Volume: {ta['volume']['trend']} ({ta['volume']['ratio']:.1f}x average)",
+        f"• Momentum: {ta['momentum']['trend']} with {ta['momentum']['strength']:.2f} strength",
+        "\nTrend Analysis:",
+        f"• Short-term: {ta['overall_trend']['short']}",
+        f"• Medium-term: {ta['overall_trend']['medium']}",
+        "\nPrediction:",
+        f"• Direction: {prediction['primary_trend']}",
+        f"• Confidence: {prediction['confidence']:.1f}%",
+        f"• Strength: {prediction['strength']}",
+        "\nTrading Signals:",
+        "• " + ("Accumulation Zone" if ta['rsi']['value'] < 30 else "Distribution Zone" if ta['rsi']['value'] > 70 else "Neutral Zone"),
+        "• " + ("Potential Breakout" if ta['bollinger']['squeeze'] else "Normal Volatility"),
+        "• Volume supports the trend" if ta['volume']['ratio'] > 1.5 else "Volume suggests caution"
+    ]
+    
+    return "\n".join(analysis_text)
+
 def generate_analysis_chart(data: Dict[str, Any]) -> str:
-    """Generate ASCII chart analysis with technical indicators"""
+    """Generate ASCII chart analysis with ticker and detailed prediction"""
     price = data['price']
     change = data['change_24h']
     volume = data['volume_24h']
     market_cap = data.get('extra', {}).get('marketCap', 0)
+    ticker = data.get('extra', {}).get('symbol', 'UNKNOWN').upper()
     
     # Get technical analysis if historical data is available
     technical_analysis = None
@@ -300,9 +390,9 @@ def generate_analysis_chart(data: Dict[str, Any]) -> str:
     else:
         price_str = f"{price:.6f}"
     
-    # Base chart
+    # Base chart with ticker
     chart = [
-        f"║ Market Analysis {sentiment} ║",
+        f"║ {ticker} Analysis {sentiment} ║",
         f"║ Price: ${price_str} ║",
         f"║ Market Cap: ${market_cap:,.0f} ║",
         f"║ 24h Change: {change:.2f}% ║",
@@ -312,22 +402,9 @@ def generate_analysis_chart(data: Dict[str, Any]) -> str:
         f"║ Chain: {data.get('extra', {}).get('chain', 'unknown').title()} ║"
     ]
     
-    # Add technical analysis if available
+    # Add detailed analysis if available
     if technical_analysis and not technical_analysis.get('error'):
-        chart.extend([
-            "║ Technical Analysis ║",
-            f"║ RSI: {technical_analysis['rsi']:.2f} ║",
-            f"║ MACD Trend: {technical_analysis['macd_trend']} ║",
-            f"║ Bollinger Bands: {technical_analysis['bb_position']} ║",
-            f"║ Overall Trend: {technical_analysis['trend']} ║"
-        ])
-        
-        # Add trading signals
-        if technical_analysis['signals']:
-            chart.extend([
-                "║ Signals ║",
-                *[f"║ • {signal} ║" for signal in technical_analysis['signals']]
-            ])
+        chart.append(generate_detailed_analysis(data, technical_analysis))
     
     return "\n".join(chart)
 
