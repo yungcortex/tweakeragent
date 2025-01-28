@@ -68,15 +68,19 @@ APIS = {
     'birdeye': {
         'url': "https://public-api.birdeye.so",
         'timeout': 10,
-        'api_key': 'YOUR_BIRDEYE_API_KEY'  # Replace with your API key
+        'api_key': 'b778bc1236344299ac5f2e6b5b2e164e'  # Replace with your actual API key
     },
 }
 
 # Token mappings for different platforms
 TOKEN_MAPPINGS = {
-    'btc': {'coingecko': 'bitcoin', 'defillama': 'bitcoin'},
-    'eth': {'coingecko': 'ethereum', 'defillama': 'ethereum'},
-    'sol': {'coingecko': 'solana', 'defillama': 'solana'},
+    'btc': {'coingecko': 'bitcoin', 'defillama': 'bitcoin', 'address': 'bitcoin'},
+    'eth': {'coingecko': 'ethereum', 'defillama': 'ethereum', 'address': 'ethereum'},
+    'sol': {
+        'coingecko': 'solana',
+        'defillama': 'solana',
+        'address': 'So11111111111111111111111111111111111111112'  # Native SOL token address
+    },
     'bnb': {'coingecko': 'binancecoin', 'defillama': 'binancecoin'},
     'xrp': {'coingecko': 'ripple', 'defillama': 'ripple'},
     'doge': {'coingecko': 'dogecoin', 'defillama': 'dogecoin'},
@@ -784,35 +788,91 @@ async def get_raydium_data(session: aiohttp.ClientSession, token_address: str) -
     return None
 
 async def get_token_data(token_id: str) -> Optional[Dict[str, Any]]:
-    """Get token data with improved error handling"""
+    """Get token data with improved token resolution"""
     async with aiohttp.ClientSession() as session:
-        results = []
-        
-        # Try DexScreener first
-        dex_data = await get_dexscreener_data(session, token_id)
-        if dex_data:
-            results.append(dex_data)
-        
-        # If it's a Solana address, try Birdeye
-        if len(token_id) > 32 and not token_id.startswith('0x'):
-            birdeye_data = await get_birdeye_data(session, token_id)
-            if birdeye_data:
-                results.append(birdeye_data)
-        
-        # If we got any results, return the one with highest volume
-        if results:
-            best_result = max(results, 
-                            key=lambda x: float(x.get('volume_24h', 0)) if x.get('volume_24h') else 0)
+        try:
+            # Normalize token_id
+            token_id = token_id.lower()
             
-            # Ensure we have historical data
-            if not best_result.get('extra', {}).get('historical'):
-                historical = await get_historical_data(session, token_id)
-                if historical:
-                    best_result.setdefault('extra', {})['historical'] = historical
+            # Check if it's a known token symbol
+            if token_id in TOKEN_MAPPINGS:
+                token_address = TOKEN_MAPPINGS[token_id]['address']
+            else:
+                token_address = token_id
             
-            return best_result
+            # For SOL specifically
+            if token_id == 'sol':
+                # Try Birdeye first for SOL
+                birdeye_data = await get_birdeye_data(session, TOKEN_MAPPINGS['sol']['address'])
+                if birdeye_data:
+                    historical = await get_historical_data(session, TOKEN_MAPPINGS['sol']['address'], 'solana')
+                    if historical:
+                        birdeye_data.setdefault('extra', {})['historical'] = historical
+                    return birdeye_data
+                
+                # Fallback to DexScreener
+                dex_data = await get_dexscreener_data(session, TOKEN_MAPPINGS['sol']['address'])
+                if dex_data:
+                    return dex_data
+            
+            # For other tokens
+            results = []
+            
+            # Try DexScreener
+            dex_data = await get_dexscreener_data(session, token_address)
+            if dex_data:
+                results.append(dex_data)
+            
+            # Try Birdeye for Solana tokens
+            if len(token_address) > 32 and not token_address.startswith('0x'):
+                birdeye_data = await get_birdeye_data(session, token_address)
+                if birdeye_data:
+                    results.append(birdeye_data)
+            
+            # Get the best result
+            if results:
+                best_result = max(results, 
+                                key=lambda x: float(x.get('volume_24h', 0)) if x.get('volume_24h') else 0)
+                
+                # Ensure we have historical data
+                if not best_result.get('extra', {}).get('historical'):
+                    historical = await get_historical_data(session, token_address)
+                    if historical:
+                        best_result.setdefault('extra', {})['historical'] = historical
+                
+                return best_result
+            
+            logger.warning(f"No data found for token: {token_id}")
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error in get_token_data: {str(e)}")
+            return None
+
+@bp.route('/analyze_token', methods=['POST'])
+async def analyze_token():
+    """Handle token analysis requests"""
+    try:
+        data = request.get_json()
+        token_id = data.get('token_id', '').strip()
         
-        return None
+        if not token_id:
+            return jsonify({"error": "No token specified"}), 400
+        
+        token_data = await get_token_data(token_id)
+        if not token_data:
+            return jsonify({"error": f"Could not find data for token: {token_id}"}), 404
+        
+        # Get historical data and analyze
+        if token_data.get('extra', {}).get('historical'):
+            analysis = analyze_technical_indicators(token_data['extra']['historical'])
+            token_data['analysis'] = analysis
+        
+        return jsonify(token_data)
+        
+    except Exception as e:
+        logger.error(f"Error analyzing token: {str(e)}")
+        return jsonify({"error": "Analysis failed"}), 500
 
 if __name__ == '__main__':
     app.run(debug=True)
