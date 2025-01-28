@@ -372,7 +372,7 @@ def generate_detailed_analysis(data: Dict[str, Any], technical_analysis: Dict[st
     return "\n".join(analysis_text)
 
 def generate_analysis_chart(data: Dict[str, Any]) -> str:
-    """Generate ASCII chart analysis with fixed width formatting"""
+    """Generate ASCII chart analysis with fixed width formatting and detailed analysis"""
     price = data['price']
     change = data['change_24h']
     volume = data['volume_24h']
@@ -464,7 +464,89 @@ def generate_analysis_chart(data: Dict[str, Any]) -> str:
     # Close the box
     chart.append("╚" + "═" * 60 + "╝")
     
-    return "\n".join(chart)
+    # Add detailed analysis section below the chart
+    analysis_text = [
+        "",  # Add spacing
+        "📊 Detailed Market Analysis:",
+        "──────────────────────────────"
+    ]
+    
+    if technical_analysis and not technical_analysis.get('error'):
+        ta = technical_analysis
+        
+        # Market structure analysis
+        if ta['overall_trend']['short'] == ta['overall_trend']['medium']:
+            trend_strength = "strong"
+        else:
+            trend_strength = "conflicting"
+        
+        analysis_text.extend([
+            f"• Market Structure: {trend_strength.title()} {ta['overall_trend']['short']}",
+            f"• Short-term trend is {ta['overall_trend']['short'].lower()}, medium-term trend is {ta['overall_trend']['medium'].lower()}"
+        ])
+        
+        # Technical indicator analysis
+        analysis_text.extend([
+            "",
+            "🔍 Technical Indicators:",
+            f"• RSI at {ta['rsi']['value']:.1f} indicates {ta['rsi']['condition'].lower()} conditions",
+            f"• MACD shows {ta['macd']['trend'].lower()} momentum" + 
+            (" with recent cross" if ta['macd']['cross'] else ""),
+            f"• Bollinger Bands show {ta['bollinger']['trend'].lower()} pressure" +
+            (" with potential breakout forming" if ta['bollinger']['squeeze'] else "")
+        ])
+        
+        # Volume analysis
+        volume_analysis = []
+        if ta['volume']['ratio'] > 1.5:
+            volume_analysis.append("High volume supporting the current move")
+        elif ta['volume']['ratio'] < 0.5:
+            volume_analysis.append("Low volume suggesting weak conviction")
+        else:
+            volume_analysis.append("Average volume indicating normal market activity")
+        
+        analysis_text.extend([
+            "",
+            "📈 Volume Analysis:",
+            f"• {volume_analysis[0]}",
+            f"• Volume is {ta['volume']['ratio']:.1f}x the average"
+        ])
+        
+        # Price prediction
+        pred = ta['prediction']
+        confidence_desc = (
+            "high" if pred['confidence'] > 70 else 
+            "moderate" if pred['confidence'] > 50 else 
+            "low"
+        )
+        
+        analysis_text.extend([
+            "",
+            "🎯 Price Prediction:",
+            f"• {pred['primary_trend']} bias with {confidence_desc} confidence ({pred['confidence']:.1f}%)",
+            f"• {pred['signals']} out of 8 technical signals confirm this direction"
+        ])
+        
+        # Key levels and warnings
+        warnings = []
+        if ta['rsi']['value'] < 30:
+            warnings.append("Oversold conditions - Watch for potential bounce")
+        elif ta['rsi']['value'] > 70:
+            warnings.append("Overbought conditions - Watch for potential pullback")
+        if ta['bollinger']['squeeze']:
+            warnings.append("Volatility squeeze detected - Prepare for potential breakout")
+        
+        if warnings:
+            analysis_text.extend([
+                "",
+                "⚠️ Key Warnings:",
+                *[f"• {warning}" for warning in warnings]
+            ])
+    else:
+        analysis_text.append("Insufficient historical data for detailed analysis")
+    
+    # Combine chart with analysis
+    return "\n".join(chart + analysis_text)
 
 def get_random_response():
     """Get a random non-analysis response with more variety"""
@@ -536,7 +618,7 @@ def extract_token(message: str) -> Optional[str]:
 
 @bp.route('/')
 def index():
-    return render_template('index.html')
+    return render_template('index.html', initial_message="Hi! I can help you check crypto prices and market analysis. Try asking about any coin like \"How is BTC doing?\" or \"Check SOL price\"")
 
 @app.route('/')
 def home():
