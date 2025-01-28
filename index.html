@@ -28,12 +28,87 @@
         </div>
         <div class="messages" id="messages">
             <!-- Messages will appear here -->
+            <div class="message bot-message">
+                Hi! I can help you check crypto prices and market analysis. Try asking about any coin like "How is BTC doing?" or "Check SOL price"
+            </div>
         </div>
         <div class="input-container">
-            <input type="text" id="userInput" placeholder="Type your message..." onkeypress="handleKeyPress(event)">
-            <button onclick="sendMessage()">Send</button>
+            <input type="text" id="message-input" placeholder="Type your message..." onkeypress="handleKeyPress(event)">
+            <button class="send-button" onclick="handleSendMessage()">Send</button>
         </div>
     </div>
-    <script src="{{ url_for('static', filename='main_v2.js') }}"></script>
+
+    <script>
+        const messagesContainer = document.getElementById('messages');
+        const messageInput = document.getElementById('message-input');
+        const sendButton = document.querySelector('.send-button');
+
+        // Function to add a message to the chat
+        function addMessage(content, isUser = false) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${isUser ? 'user-message' : 'bot-message'}`;
+            
+            // Handle both string and object content
+            if (typeof content === 'object') {
+                // Format token analysis data
+                let formattedContent = `${content.name || 'Token'} Analysis 🚀\n\n`;
+                formattedContent += `Price: $${content.price}\n`;
+                formattedContent += `Market Cap: $${content.market_cap}\n`;
+                formattedContent += `24h Change: ${content.change_24h}%\n`;
+                formattedContent += `24h Volume: $${content.volume_24h}\n`;
+                formattedContent += `Volume Rating: ${content.volume_rating} ✅\n`;
+                formattedContent += `Chain: ${content.chain || 'Unknown'}`;
+                messageDiv.textContent = formattedContent;
+            } else {
+                messageDiv.textContent = content;
+            }
+            
+            messageDiv.style.whiteSpace = 'pre-wrap';
+            messagesContainer.appendChild(messageDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        // Function to handle sending messages
+        async function handleSendMessage() {
+            const message = messageInput.value.trim();
+            if (!message) return;
+
+            // Add user message to chat
+            addMessage(message, true);
+            messageInput.value = '';
+
+            try {
+                const response = await fetch('/process_message', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ message: message })
+                });
+
+                const data = await response.json();
+                console.log('Response data:', data); // Debug log
+                
+                if (data.error) {
+                    addMessage(data.error);
+                } else {
+                    addMessage(data);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                addMessage('Sorry, there was an error processing your request.');
+            }
+        }
+
+        // Event listeners
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                handleSendMessage();
+            }
+        }
+
+        sendButton.addEventListener('click', handleSendMessage);
+    </script>
 </body>
 </html>
