@@ -2,8 +2,11 @@ body {
     font-family: 'Courier New', monospace;
     background: #0a0a0f;
     margin: 0;
-    padding: 20px;
+    padding: 10px;
     color: #00ff9d;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
 }
 
 .chat-container {
@@ -14,9 +17,9 @@ body {
     border-radius: 10px;
     box-shadow: 0 0 30px rgba(0, 255, 157, 0.2);
     backdrop-filter: blur(5px);
-    flex: 1;
     display: flex;
     flex-direction: column;
+    height: calc(100vh - 20px);
     padding: 0;
 }
 
@@ -43,27 +46,22 @@ body {
 }
 
 #messages {
-    height: calc(100vh - 180px);
+    flex: 1;
     overflow-y: auto;
     padding: 10px;
     margin: 0;
     display: flex;
     flex-direction: column;
     gap: 10px;
+    max-height: calc(100vh - 180px);
 }
 
 .message {
-    margin: 0;
+    margin: 10px 0;
     padding: 10px;
     border-radius: 5px;
     max-width: 80%;
-    white-space: pre-wrap;
-    word-wrap: break-word;
-}
-
-.message:first-child {
-    margin-top: 0;
-    padding-top: 0;
+    backdrop-filter: blur(5px);
 }
 
 .user-message {
@@ -246,9 +244,7 @@ button:hover {
 }
 
 .container {
-    display: flex;
-    flex-direction: column;
-    height: 100vh;
+    height: 100%;
     padding: 0;
     margin: 0;
 }
