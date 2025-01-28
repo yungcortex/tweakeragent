@@ -781,60 +781,79 @@ async def get_raydium_data(session: aiohttp.ClientSession, token_address: str) -
     return None
 
 async def get_token_data(token_id: str) -> Optional[Dict[str, Any]]:
-    """Get comprehensive token data"""
+    """Get comprehensive token data with improved error handling"""
     async with aiohttp.ClientSession() as session:
         try:
             token_id = token_id.lower().strip()
             
             # For SOL specifically
             if token_id in ['sol', 'solana']:
-                # Get Birdeye data first
-                birdeye_data = await get_birdeye_data(session, TOKEN_MAPPINGS['sol']['address'])
-                if birdeye_data:
-                    # Get CoinGecko data for additional info
-                    coingecko_data = await get_coingecko_data(session, 'solana')
-                    return {
-                        'name': 'Solana',
-                        'symbol': 'SOL',
-                        'price': birdeye_data.get('price'),
-                        'change_24h': birdeye_data.get('change_24h', 0),
-                        'volume_24h': birdeye_data.get('volume_24h', 0),
-                        'market_cap': coingecko_data.get('market_cap') if coingecko_data else birdeye_data.get('market_cap', 0),
-                        'chain': 'Solana',
-                        'extra': {
-                            'historical': await get_historical_data(session, TOKEN_MAPPINGS['sol']['address'])
-                        }
-                    }
-
-            # Try Birdeye for token info
-            token_info_url = f"{APIS['birdeye']['url']}/public/token_list/token_meta"
-            headers = {'X-API-KEY': APIS['birdeye']['api_key']}
-            params = {'token_address': token_id}
-            
-            async with session.get(token_info_url, params=params, headers=headers) as resp:
-                if resp.status == 200:
-                    info_data = await resp.json()
-                    token_info = info_data.get('data', {}).get(token_id, {})
-                    
-                    if token_info:
-                        # Get price and market data
-                        birdeye_data = await get_birdeye_data(session, token_id)
-                        if birdeye_data:
+                # Get CoinGecko data for SOL
+                coingecko_url = f"{APIS['coingecko']['url']}/simple/price?ids=solana&vs_currencies=usd&include_24hr_vol=true&include_24hr_change=true&include_market_cap=true"
+                async with session.get(coingecko_url) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        if data.get('solana'):
+                            sol_data = data['solana']
                             return {
-                                'name': token_info.get('symbol', 'Unknown'),  # Use symbol as name if name not available
-                                'symbol': token_info.get('symbol', 'Unknown'),
-                                'price': birdeye_data.get('price'),
-                                'change_24h': birdeye_data.get('change_24h', 0),
-                                'volume_24h': birdeye_data.get('volume_24h', 0),
-                                'market_cap': birdeye_data.get('market_cap', 
-                                    float(token_info.get('supply', 0)) * birdeye_data.get('price', 0)),
+                                'name': 'Solana',
+                                'symbol': 'SOL',
+                                'price': sol_data.get('usd', 0),
+                                'change_24h': sol_data.get('usd_24h_change', 0),
+                                'volume_24h': sol_data.get('usd_24h_vol', 0),
+                                'market_cap': sol_data.get('usd_market_cap', 0),
                                 'chain': 'Solana',
-                                'extra': {
-                                    'historical': await get_historical_data(session, token_id)
-                                }
+                                'volume_rating': 'High' if sol_data.get('usd_24h_vol', 0) > 1000000 else 'Low'
                             }
 
-            logger.warning(f"No data found for token: {token_id}")
+            # Fallback to Birdeye for SOL and other tokens
+            headers = {'X-API-KEY': APIS['birdeye']['api_key']}
+            
+            # Get token metadata
+            meta_url = f"{APIS['birdeye']['url']}/public/token_list/token_meta"
+            params = {'token_address': token_id}
+            
+            async with session.get(meta_url, headers=headers, params=params) as resp:
+                if resp.status == 200:
+                    meta_data = await resp.json()
+                    token_meta = meta_data.get('data', {}).get(token_id, {})
+                    
+                    # Get price data
+                    price_url = f"{APIS['birdeye']['url']}/public/price"
+                    async with session.get(price_url, headers=headers, params=params) as price_resp:
+                        if price_resp.status == 200:
+                            price_data = await price_resp.json()
+                            price = float(price_data.get('data', {}).get('value', 0))
+                            
+                            # Get 24h change
+                            change_url = f"{APIS['birdeye']['url']}/public/token_price/24h_change"
+                            async with session.get(change_url, headers=headers, params=params) as change_resp:
+                                if change_resp.status == 200:
+                                    change_data = await change_resp.json()
+                                    change = float(change_data.get('data', {}).get(token_id, 0))
+                                    
+                                    # Get 24h volume
+                                    volume_url = f"{APIS['birdeye']['url']}/public/token_price/24h_volume"
+                                    async with session.get(volume_url, headers=headers, params=params) as vol_resp:
+                                        if vol_resp.status == 200:
+                                            vol_data = await vol_resp.json()
+                                            volume = float(vol_data.get('data', {}).get(token_id, 0))
+                                            
+                                            supply = float(token_meta.get('supply', 0))
+                                            market_cap = price * supply if supply > 0 else 0
+                                            
+                                            return {
+                                                'name': token_meta.get('name', 'Unknown'),
+                                                'symbol': token_meta.get('symbol', 'Unknown'),
+                                                'price': price,
+                                                'change_24h': change,
+                                                'volume_24h': volume,
+                                                'market_cap': market_cap,
+                                                'chain': 'Solana',
+                                                'volume_rating': 'High' if volume > 1000000 else 'Low'
+                                            }
+            
+            logger.error(f"Could not fetch data for token: {token_id}")
             return None
             
         except Exception as e:
@@ -844,30 +863,28 @@ async def get_token_data(token_id: str) -> Optional[Dict[str, Any]]:
 @bp.route('/analyze_token', methods=['POST'])
 @async_route
 async def analyze_token():
-    """Handle token analysis requests"""
+    """Handle token analysis requests with better error handling"""
     try:
         data = request.get_json()
+        if not data:
+            return jsonify({"error": "No data provided"}), 400
+            
         token_id = data.get('token_id', '').strip()
-        
         if not token_id:
             return jsonify({"error": "No token specified"}), 400
+            
+        logger.info(f"Analyzing token: {token_id}")
         
         token_data = await get_token_data(token_id)
         if not token_data:
             return jsonify({"error": f"Could not find data for token: {token_id}"}), 404
-        
-        # Get historical data and analyze
-        historical_data = token_data.get('extra', {}).get('historical', [])
-        if historical_data:
-            analysis = analyze_technical_indicators(historical_data)
-            if not analysis.get('error'):
-                token_data['analysis'] = analysis
-        
+            
+        logger.info(f"Token data retrieved: {token_data}")
         return jsonify(token_data)
         
     except Exception as e:
         logger.error(f"Error analyzing token: {str(e)}")
-        return jsonify({"error": "Analysis failed"}), 500
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     app.run(debug=True)
