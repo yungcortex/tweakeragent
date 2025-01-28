@@ -74,7 +74,7 @@ APIS = {
     'birdeye': {
         'url': "https://public-api.birdeye.so",
         'timeout': 10,
-        'api_key': getenv('BIRDEYE_API_KEY', 'your_api_key_here')  # Replace with your actual key if not using env vars
+        'api_key': getenv('BIRDEYE_API_KEY', 'b778bc1236344299ac5f2e6b5b2e164e')  # Replace with your actual key if not using env vars
     },
 }
 
